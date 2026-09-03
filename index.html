@@ -1,0 +1,1631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Runway Overseas — ERP v5 (Cloud)</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyA8iLkXxOmDrcm9a_nZ4nSlkNgJGgOfmoU",
+    authDomain: "runway-erp.firebaseapp.com",
+    databaseURL: "https://runway-erp-default-rtdb.firebaseio.com",
+    projectId: "runway-erp",
+    storageBucket: "runway-erp.firebasestorage.app",
+    messagingSenderId: "821401976549",
+    appId: "1:821401976549:web:3c6043aa2b09f259c91e0c",
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  const fbSet = (path, val) => db.ref(path).set(val);
+  const fbListen = (path, cb) => db.ref(path).on('value', snap => cb(snap.val()));
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:#e8e2d5;color:#0d1b2a;font-size:14px;min-height:100vh}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:#243d56;border-radius:3px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#c9a84c!important;box-shadow:0 0 0 2px rgba(201,168,76,.15)!important}
+@media print{
+  .no-print{display:none!important}
+  .print-only{display:block!important}
+  body{background:#fff!important;color:#000!important;margin:0;padding:0}
+  *{box-shadow:none!important}
+  @page{margin:15mm}
+}
+.print-only{display:none}
+tr:hover td{background:#fef9ec!important}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useMemo,useRef}=React;
+
+const STAGES=[
+  {id:"passport_in",  label:"Passport In",  icon:"📄"},
+  {id:"medical",      label:"Medical",      icon:"🏥"},
+  {id:"agency_assign",label:"Agency Assign",icon:"🏢"},
+  {id:"mofa",         label:"MOFA",         icon:"📋"},
+  {id:"finger",       label:"Finger",       icon:"👆"},
+  {id:"documents",    label:"Documents",    icon:"📁"},
+  {id:"visa",         label:"Visa",         icon:"🛂"},
+  {id:"bmet",         label:"BMET",         icon:"🎓"},
+  {id:"manpower",     label:"Manpower",     icon:"⚙️"},
+  {id:"flight",       label:"Flight",       icon:"✈️"},
+  {id:"iqama",        label:"Iqama",        icon:"🪪"},
+];
+const SECTION_TABS=STAGES.filter(s=>s.id!=="passport_in");
+// ── ComboInput: type freely or pick from list ──
+function ComboInput({label,value,onChange,options,placeholder=""}){
+  const [open,setOpen]=useState(false);
+  const [q,setQ]=useState(value||"");
+  const ref=React.useRef();
+  useEffect(()=>setQ(value||""),[value]);
+  useEffect(()=>{
+    const handler=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+    document.addEventListener("mousedown",handler);
+    return()=>document.removeEventListener("mousedown",handler);
+  },[]);
+  const filtered=options.filter(o=>o.toLowerCase().includes(q.toLowerCase()));
+  const INP_S={width:"100%",padding:"8px 11px",borderRadius:6,border:`1px solid ${co.border}`,
+    background:co.white,fontSize:13,color:co.navy,fontFamily:"DM Sans,sans-serif",outline:"none"};
+  return(
+    <div ref={ref} style={{position:"relative",marginBottom:13}}>
+      {label&&<div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,color:co.t3,marginBottom:5}}>{label}</div>}
+      <input style={INP_S} value={q} placeholder={placeholder||"Type or select..."}
+        onChange={e=>{setQ(e.target.value);onChange(e.target.value);setOpen(true);}}
+        onFocus={()=>setOpen(true)}/>
+      {open&&(q===""||filtered.length>0)&&(
+        <div style={{position:"absolute",top:"100%",left:0,right:0,background:co.white,
+          border:`1px solid ${co.border}`,borderRadius:6,zIndex:100,maxHeight:180,
+          overflowY:"auto",boxShadow:"0 4px 12px rgba(0,0,0,.1)"}}>
+          {filtered.map(o=>(
+            <div key={o} onClick={()=>{setQ(o);onChange(o);setOpen(false);}}
+              style={{padding:"8px 12px",cursor:"pointer",fontSize:13,color:co.navy,
+                borderBottom:`1px solid ${co.border2}`}}
+              onMouseEnter={e=>e.target.style.background=co.bg}
+              onMouseLeave={e=>e.target.style.background=co.white}>
+              {o}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const COUNTRIES=["Saudi Arabia","UAE","Qatar","Kuwait","Bahrain","Oman","Malaysia","Singapore","Jordan","Libya","Maldives","Mauritius"];
+const JOBS=["Construction Worker","Driver","Security Guard","Cleaner","Electrician","Plumber","Mason","Helper","Cook","Gardener","Welder","Painter","Carpenter","Tailor","Factory Worker"];
+const VTYPES=["Company Visa","3 Month Free Visa","1 Year Free Visa","Other"];
+const co={navy:"#0d1b2a",navy2:"#1a2e42",navy3:"#243d56",gold:"#c9a84c",gold2:"#e8c97a",gold3:"#fef9ec",bg:"#e8e2d5",white:"#fff",border:"#e2dace",border2:"#d4c9a8",t2:"#4a5568",t3:"#718096",t4:"#a0aec0",green:"#1a6640",green3:"#e8f5ee",red:"#c0392b",red3:"#fde8e8",blue:"#2c3e7a",blue3:"#e8eaf5",orange:"#c2410c",orange3:"#fff7ed",purple:"#5b21b6",purple3:"#f5f3ff"};
+const CARD={background:co.white,borderRadius:12,boxShadow:"0 2px 8px rgba(13,27,42,.09)",border:`1px solid ${co.border}`,padding:16};
+const INP={width:"100%",padding:"8px 11px",border:`1.5px solid ${co.border}`,borderRadius:7,fontSize:13,fontFamily:"'DM Sans',sans-serif",background:"#fff",outline:"none"};
+const SEL={width:"100%",padding:"8px 11px",border:`1.5px solid ${co.border}`,borderRadius:7,fontSize:13,fontFamily:"'DM Sans',sans-serif",background:"#fff"};
+
+const EMPTY={agents:[],agencies:[],candidates:[],medical:{},mofa:{},finger:{},documents:{},visa:{},bmet:{},manpower:{},flight:{},iqama:{},stage_logs:[],passport_returns:[]};
+const SK="runway_erp_v2";
+const load=()=>{try{const r=localStorage.getItem(SK);if(r){const p=JSON.parse(r);return{...JSON.parse(JSON.stringify(EMPTY)),...p};}}catch(e){}return JSON.parse(JSON.stringify(EMPTY));};
+const persist=d=>{try{localStorage.setItem(SK,JSON.stringify(d));}catch(e){}};
+const uid=p=>(p||"x")+"_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);
+const today=()=>new Date().toISOString().slice(0,10);
+const genROCode=(candidates)=>{
+  const nums=candidates.map(c=>{
+    if(!c.ro_code)return 0;
+    const n=parseInt(c.ro_code.replace('RO-',''));
+    return isNaN(n)?0:n;
+  });
+  const next=(nums.length?Math.max(...nums):0)+1;
+  return 'RO-'+(next<1000?String(next).padStart(3,'0'):String(next));
+};
+const daysDiff=(d1,d2)=>{if(!d1)return null;const ms=new Date(d2||today())-new Date(d1);return Math.floor(ms/86400000);};
+const procDays=c=>daysDiff(c.created_at);
+const ppLeft=exp=>{if(!exp)return null;return daysDiff(today(),exp);};
+const visaLeft=vd=>{if(!vd)return null;const e=new Date(vd);e.setDate(e.getDate()+90);return Math.floor((e-new Date())/86400000);};
+const flightThisWeek=fd=>{if(!fd)return false;const f=new Date(fd),n=new Date(),w=new Date();w.setDate(w.getDate()+7);return f>=n&&f<=w;};
+const waLink=phone=>{if(!phone)return null;const n=phone.replace(/\D/g,"");if(n.startsWith("880"))return"https://wa.me/"+n;if(n.startsWith("0"))return"https://wa.me/88"+n;return"https://wa.me/"+n;};
+const isIntlNumber=phone=>{if(!phone)return false;const n=phone.replace(/\D/g,"");return!n.startsWith("0")&&!n.startsWith("880");};
+
+// ── UI Primitives ─────────────────────────────────────────────────
+function Lbl({c}){return <label style={{display:"block",fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,color:co.t3,marginBottom:5}}>{c}</label>}
+function FInput({label,mb=13,...p}){return(<div style={{marginBottom:mb}}>{label&&<Lbl c={label}/>}<input {...p} style={{...INP,...p.style}} onFocus={e=>{e.target.style.borderColor=co.gold;e.target.style.boxShadow="0 0 0 2px rgba(201,168,76,.15)"}} onBlur={e=>{e.target.style.borderColor=co.border;e.target.style.boxShadow="none"}}/></div>);}
+function FSelect({label,mb=13,children,...p}){return(<div style={{marginBottom:mb}}>{label&&<Lbl c={label}/>}<select {...p} style={{...SEL,...p.style}}>{children}</select></div>);}
+function FTextarea({label,mb=13,...p}){return(<div style={{marginBottom:mb}}>{label&&<Lbl c={label}/>}<textarea {...p} style={{width:"100%",padding:"8px 11px",border:`1.5px solid ${co.border}`,borderRadius:7,fontSize:13,fontFamily:"'DM Sans',sans-serif",resize:"vertical",...p.style}}/></div>);}
+function Btn({children,onClick,v="navy",sz="md",full,sx={}}){
+  const bv={navy:{background:co.navy2,color:co.gold2,border:`1px solid rgba(201,168,76,.2)`},gold:{background:co.gold,color:co.navy,border:"none"},ghost:{background:"transparent",color:co.t2,border:`1px solid ${co.border2}`},red:{background:co.red,color:"#fff",border:"none"},green:{background:co.green,color:"#fff",border:"none"},orange:{background:co.orange,color:"#fff",border:"none"},purple:{background:co.purple,color:"#fff",border:"none"}};
+  const bsz={sm:{padding:"5px 11px",fontSize:12},md:{padding:"8px 16px",fontSize:13},lg:{padding:"10px 22px",fontSize:14}};
+  return(<button onClick={onClick} style={{...bv[v],...bsz[sz],borderRadius:7,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",width:full?"100%":undefined,display:"inline-flex",alignItems:"center",gap:5,...sx}}>{children}</button>);
+}
+function SaveBtn({saved,onClick}){return(<button onClick={onClick} style={{padding:"7px 16px",background:saved?co.green:co.navy2,color:saved?"#fff":co.gold2,border:"none",borderRadius:7,fontWeight:600,cursor:"pointer",fontSize:12,fontFamily:"'DM Sans',sans-serif",transition:"all .3s",display:"flex",alignItems:"center",gap:5}}>{saved?"✓ Saved!":"💾 Save"}</button>);}
+function SaveNextBtns({saved,onSave,onNext,nextLabel,canNext}){
+  return(
+    <div style={{display:"flex",gap:8,justifyContent:"flex-end",alignItems:"center",marginTop:10}}>
+      <SaveBtn saved={saved} onClick={onSave}/>
+      <button onClick={canNext?()=>{onSave();if(onNext)onNext();}:undefined} disabled={!canNext} title={canNext?"":"Candidate এই stage এ নেই"} style={{padding:"7px 14px",background:canNext?co.gold:"#e5e2dc",color:canNext?co.navy:co.t4,border:"none",borderRadius:7,fontWeight:700,cursor:canNext?"pointer":"not-allowed",fontSize:12,fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",gap:5,opacity:canNext?1:.55,whiteSpace:"nowrap"}}>Next: {nextLabel} →</button>
+    </div>
+  );
+}
+function Badge({label,color,bg}){return <span style={{background:bg,color,border:`1px solid ${color}33`,padding:"2px 9px",borderRadius:999,fontSize:11,fontWeight:700,display:"inline-block"}}>{label}</span>;}
+function StageBadge({stage}){const st=STAGES.find(s=>s.id===stage);const M={passport_in:{bg:co.blue3,c:co.blue},medical:{bg:co.orange3,c:co.orange},agency_assign:{bg:co.green3,c:co.green},mofa:{bg:co.purple3,c:co.purple},finger:{bg:co.red3,c:co.red},documents:{bg:co.blue3,c:co.blue},visa:{bg:co.gold3,c:"#92680a"},bmet:{bg:co.green3,c:co.green},manpower:{bg:co.purple3,c:co.purple},flight:{bg:co.blue3,c:co.blue},iqama:{bg:co.green3,c:co.green}};const sc=M[stage]||{bg:"#eee",c:co.t3};return <Badge label={st?st.icon+" "+st.label:stage} color={sc.c} bg={sc.bg}/>;}
+function SecTitle({c}){return(<div style={{fontFamily:"'Playfair Display',serif",fontSize:14,fontWeight:700,color:co.navy,marginBottom:14,display:"flex",alignItems:"center",gap:7}}><span style={{display:"inline-block",width:3,height:14,background:co.gold,borderRadius:2,flexShrink:0}}/>{c}</div>);}
+function Modal({open,onClose,title,children,width=540}){if(!open)return null;return(<div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(13,27,42,.65)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:12}}><div style={{background:co.white,borderRadius:12,width,maxWidth:"97vw",maxHeight:"93vh",overflow:"auto",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 18px",background:co.navy,borderRadius:"12px 12px 0 0",position:"sticky",top:0,zIndex:1}}><span style={{fontFamily:"'Playfair Display',serif",color:co.gold,fontWeight:700,fontSize:15}}>{title}</span><button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,.5)",fontSize:26,cursor:"pointer",lineHeight:1,padding:"0 4px"}}>×</button></div><div style={{padding:22}}>{children}</div></div></div>);}
+function ConfirmModal({open,onClose,onConfirm,title,msg,confirmLabel="Delete",v="red"}){if(!open)return null;return(<Modal open={open} onClose={onClose} title={title||"Confirm"} width={400}><p style={{color:co.t2,fontSize:14,marginBottom:20,lineHeight:1.6}}>{msg}</p><div style={{display:"flex",gap:9,justifyContent:"flex-end"}}><Btn v="ghost" onClick={onClose}>Cancel</Btn><Btn v={v} onClick={()=>{onConfirm();onClose();}}>{confirmLabel}</Btn></div></Modal>);}
+
+// Bug 7: CheckRow — no URGENT badge, urgent→red label only
+function CheckRow({label,checked,onChange,urgent}){
+  return(<label style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",cursor:"pointer",fontSize:13,borderBottom:`1px solid ${co.border}`}}>
+    <input type="checkbox" checked={!!checked} onChange={e=>onChange(e.target.checked)} style={{accentColor:co.navy,width:14,height:14,cursor:"pointer",flexShrink:0}}/>
+    <span style={{color:checked?co.green:urgent?"#b91c1c":co.navy,fontWeight:checked?600:400,flex:1}}>{label}</span>
+    {checked&&<span style={{fontSize:11,color:co.green}}>✓</span>}
+  </label>);
+}
+function WaBtn({phone}){
+  if(!phone)return null;
+  const intl=isIntlNumber(phone);
+  return(<span title={intl?"International number — include country code":""}>
+    <a href={waLink(phone)} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",background:"#25D366",color:"#fff",borderRadius:5,fontSize:11,fontWeight:600,textDecoration:"none",marginLeft:6}}>💬 WA</a>
+    {intl&&<span style={{fontSize:9,color:co.orange,marginLeft:3}}>🌐</span>}
+  </span>);
+}
+function CopyBtn({text}){
+  const [copied,setCopied]=useState(false);
+  const doCopy=()=>{navigator.clipboard.writeText(text).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),1500);});};
+  return(<button onClick={doCopy} title="Copy Passport No" style={{padding:"2px 7px",background:copied?co.green:"#e8e4dc",color:copied?"#fff":co.t2,border:"none",borderRadius:4,fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",marginLeft:4,transition:"all .2s"}}>{copied?"✓":"📋"}</button>);
+}
+function SC({title,children}){return(<div style={CARD}><SecTitle c={title}/>{children}</div>);}
+
+// Inline error box
+const ErrBox=({msg})=>msg?<div style={{background:co.red3,color:co.red,border:`1px solid #f5c6cb`,padding:"7px 12px",borderRadius:7,marginBottom:12,fontSize:13,fontWeight:600}}>⚠️ {msg}</div>:null;
+
+// ── App ───────────────────────────────────────────────────────────
+function App(){
+  const [data,setData]=useState(()=>JSON.parse(JSON.stringify(EMPTY)));
+  const [page,setPage]=useState("dashboard");
+  const [selId,setSelId]=useState(null);
+  const [prevPage,setPrevPage]=useState("candidates");
+  const [initStageFilter,setInitStageFilter]=useState("");
+  const [loaded,setLoaded]=useState(false);
+
+  // ── Firebase realtime listener ──
+  useEffect(()=>{
+    fbListen('erp', val=>{
+      if(val) setData(d=>({...JSON.parse(JSON.stringify(EMPTY)),...val}));
+      setLoaded(true);
+    });
+  },[]);
+
+  // ── upd: update state + Firebase ──
+  const upd=patch=>{
+    setData(prev=>{
+      const next={...prev,...patch};
+      fbSet('erp', next);
+      return next;
+    });
+  };
+
+  const resetAll=()=>{
+    const fresh=JSON.parse(JSON.stringify(EMPTY));
+    setData(fresh);
+    fbSet('erp', fresh);
+  };
+
+  // ── Password lock ──
+  const [unlocked,setUnlocked]=useState(()=>sessionStorage.getItem('rw_auth')==='1');
+  const [pw,setPw]=useState('');
+  const [pwErr,setPwErr]=useState(false);
+  const doLogin=()=>{
+    if(pw==='s@yeem2202'){sessionStorage.setItem('rw_auth','1');setUnlocked(true);}
+    else{setPwErr(true);setTimeout(()=>setPwErr(false),2000);}
+  };
+
+  if(!unlocked) return React.createElement('div',{style:{display:'flex',alignItems:'center',
+    justifyContent:'center',height:'100vh',background:'#0d1b2a'}},
+    React.createElement('div',{style:{background:'#fff',borderRadius:14,padding:40,
+      width:340,boxShadow:'0 8px 32px rgba(0,0,0,.3)',textAlign:'center'}},
+      React.createElement('div',{style:{width:56,height:56,background:'#c9a84c',borderRadius:12,
+        display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px',
+        fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:24,color:'#0d1b2a'}},'R'),
+      React.createElement('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:20,
+        fontWeight:700,color:'#0d1b2a',marginBottom:4}},'Runway Overseas ERP'),
+      React.createElement('div',{style:{fontSize:12,color:'#718096',marginBottom:24}},'Enter password to continue'),
+      React.createElement('input',{type:'password',placeholder:'Password',value:pw,
+        onChange:e=>setPw(e.target.value),
+        onKeyDown:e=>e.key==='Enter'&&doLogin(),
+        style:{width:'100%',padding:'10px 14px',borderRadius:7,border:`2px solid ${pwErr?'#c0392b':'#e2dace'}`,
+          fontSize:14,marginBottom:10,outline:'none',fontFamily:"'DM Sans',sans-serif",
+          textAlign:'center',letterSpacing:2}}),
+      pwErr&&React.createElement('div',{style:{color:'#c0392b',fontSize:12,marginBottom:8}},'❌ Incorrect password'),
+      React.createElement('button',{onClick:doLogin,style:{width:'100%',background:'#0d1b2a',
+        color:'#fff',border:'none',borderRadius:7,padding:'11px',fontSize:14,
+        fontWeight:700,cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}},'🔓 Login')
+    )
+  );
+
+  if(!loaded) return React.createElement('div',{style:{display:'flex',alignItems:'center',
+    justifyContent:'center',height:'100vh',background:'#e8e2d5',color:'#0d1b2a',
+    fontSize:16,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}},'Loading Runway ERP...');
+  const go=(p,id=null,from=null,stageF="")=>{if(from)setPrevPage(from);setSelId(id);if(p==="candidates")setInitStageFilter(stageF);else setInitStageFilter("");setPage(p);};
+  return(
+    <div style={{minHeight:"100vh",background:co.bg,fontFamily:"'DM Sans',sans-serif",color:co.navy}}>
+      <div className="no-print" style={{background:co.navy,height:52,display:"flex",alignItems:"center",padding:"0 22px",position:"sticky",top:0,zIndex:200,boxShadow:"0 2px 14px rgba(0,0,0,.3)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:9,marginRight:28,flexShrink:0}}>
+          <div style={{width:34,height:34,background:co.gold,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:co.navy}}>R</div>
+          <div>
+            <div style={{fontFamily:"'Playfair Display',serif",color:"#fff",fontSize:15,lineHeight:1.1}}>Runway Overseas</div>
+            <div style={{fontSize:8,color:co.gold,letterSpacing:2,textTransform:"uppercase"}}>ERP v5 · Manpower System</div>
+          </div>
+        </div>
+        <div style={{display:"flex",overflowX:"auto"}}>
+          {[["dashboard","📊 Dashboard"],["candidates","👤 Candidates"],["agents","🤝 Agents"],["agencies","🏢 Agencies"],["reports","📈 Reports"]].map(([id,lbl])=>(
+            <button key={id} onClick={()=>go(id)} style={{padding:"8px 13px",background:"none",border:"none",borderBottom:`2.5px solid ${page===id?co.gold:"transparent"}`,color:page===id?co.gold:"rgba(255,255,255,.4)",fontSize:12,fontWeight:page===id?700:400,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap"}}>{lbl}</button>
+          ))}
+        </div>
+        <div style={{marginLeft:"auto",fontSize:11,color:"rgba(255,255,255,.28)",flexShrink:0}}>{new Date().toLocaleDateString("en-BD",{day:"numeric",month:"short",year:"numeric"})}</div>
+      </div>
+      <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 18px 70px"}}>
+        {page==="dashboard"     && <Dashboard      data={data} go={go} upd={upd} resetAll={resetAll}/>}
+        {page==="candidates"    && <CandList        data={data} go={go} upd={upd} initStageFilter={initStageFilter}/>}
+        {/* Bug 9: key={selId} added */}
+        {page==="detail"        && <CandDetail      key={selId} data={data} id={selId} upd={upd} go={go} prevPage={prevPage}/>}
+        {page==="agents"        && <AgentsList      data={data} go={go} upd={upd}/>}
+        {page==="agent_profile" && <AgentProfile    data={data} id={selId} go={go} upd={upd}/>}
+        {page==="agencies"      && <AgencyList      data={data} go={go} upd={upd}/>}
+        {page==="agency_profile"&& <AgencyProfile   data={data} id={selId} go={go} upd={upd}/>}
+        {page==="reports"       && <Reports         data={data}/>}
+      </div>
+    </div>
+  );
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────
+function Dashboard({data,go,upd,resetAll}){
+  const [showReset,setShowReset]=useState(false);
+  const [resetStep,setResetStep]=useState(1);
+  const [showAdd,setShowAdd]=useState(false);
+  const cands=data.candidates.filter(c=>!c.archived);
+  const stats=useMemo(()=>({
+    total:cands.length,
+    inProgress:cands.filter(c=>c.current_stage!=="iqama").length,
+    flightReady:cands.filter(c=>c.current_stage==="flight").length,
+    done:cands.filter(c=>c.current_stage==="iqama").length,
+    docsPending:cands.filter(c=>{if(c.current_stage!=="documents")return false;const d=data.documents[c.id];if(!d)return true;return!d.police_clearance||!d.photo_with_passport||!d.mofa_update_paper||!d.finger_slip;}).length,
+  }),[cands,data.documents]);
+  const departures=useMemo(()=>cands.filter(c=>{const fl=data.flight[c.id];return fl&&flightThisWeek(fl.flight_date);}),[cands,data.flight]);
+  // Visa expiry list — visa_date + 90 days, sorted by days remaining
+  const visaExpiryList=useMemo(()=>{
+    const today=new Date(); today.setHours(0,0,0,0);
+    return cands
+      .filter(c=>{
+        const vi=data.visa?.[c.id];
+        const fl=data.flight?.[c.id];
+        // Show: visa received = true AND flight date not yet set
+        return vi&&vi.visa_received&&vi.visa_date&&!(fl&&fl.flight_date);
+      })
+      .map(c=>{
+        const vi=data.visa[c.id];
+        const exp=new Date(vi.visa_date);
+        exp.setDate(exp.getDate()+90);
+        const daysLeft=Math.ceil((exp-today)/(1000*60*60*24));
+        const ag=data.agents.find(a=>a.id===c.agent_id);
+        return{...c,visa_date:vi.visa_date,expiry_date:exp.toISOString().slice(0,10),days_left:daysLeft,agent_name:ag?.name||"—"};
+      })
+      .sort((a,b)=>a.days_left-b.days_left);
+  },[cands,data.visa,data.flight,data.agents]);
+
+  const alerts=useMemo(()=>{
+    const list=[];
+    cands.forEach(c=>{
+      const pd=ppLeft(c.passport_expiry);
+      if(pd!==null&&pd<0)list.push({type:"danger",msg:`${c.name} — Passport EXPIRED (${c.passport_expiry})`,id:c.id});
+      else if(pd!==null&&pd<=90)list.push({type:"warn",msg:`${c.name} — Passport expires in ${pd} days`,id:c.id});
+      const vi=data.visa[c.id];
+      if(vi&&vi.visa_received){const vd=visaLeft(vi.visa_date);if(vd!==null&&vd<=14&&vd>=0)list.push({type:"danger",msg:`${c.name} — Visa expires in ${vd} days!`,id:c.id});}
+      const mofa=data.mofa[c.id];
+      if(mofa&&!mofa.update_paper_received&&["mofa","finger","documents"].includes(c.current_stage))list.push({type:"warn",msg:`${c.name} — MOFA update paper not received`,id:c.id});
+      const fi=data.finger[c.id];
+      if(fi&&fi.finger_done&&!fi.slip_received)list.push({type:"danger",msg:`${c.name} — Finger done but slip NOT received`,id:c.id});
+      const doc=data.documents[c.id];
+      if(doc&&c.current_stage==="documents"){const ms=[];if(!doc.police_clearance)ms.push("Police Clearance");if(!doc.finger_slip)ms.push("Finger Slip");if(!doc.mofa_update_paper)ms.push("MOFA Paper");if(ms.length)list.push({type:"danger",msg:`${c.name} — Missing: ${ms.join(", ")}`,id:c.id});}
+    });
+    return list.slice(0,12);
+  },[cands,data]);
+  const stageCounts=useMemo(()=>{const m={};STAGES.forEach(s=>m[s.id]=0);cands.forEach(c=>{if(m[c.current_stage]!==undefined)m[c.current_stage]++;});return m;},[cands]);
+  const agentRows=useMemo(()=>data.agents.map(a=>{const ac=cands.filter(c=>c.agent_id===a.id);return{...a,total:ac.length,active:ac.filter(c=>c.current_stage!=="iqama").length,done:ac.filter(c=>c.current_stage==="iqama").length};}).filter(a=>a.total>0),[data.agents,cands]);
+
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
+        <h2 style={{fontFamily:"'Playfair Display',serif",color:co.navy,fontSize:22,fontWeight:700}}>Dashboard</h2>
+        <div style={{display:"flex",gap:9,alignItems:"center"}}>
+          <Btn v="gold" sz="sm" onClick={()=>setShowAdd(true)}>+ Add Candidate</Btn>
+          <Btn v="red" sz="sm" onClick={()=>{setResetStep(1);setShowReset(true);}}>🗑️ Reset All Data</Btn>
+        </div>
+      </div>
+      {cands.length===0?(
+        <div style={{textAlign:"center",padding:"80px 20px"}}>
+          <div style={{fontSize:48,marginBottom:16}}>✈️</div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,color:co.navy,marginBottom:8}}>Welcome to Runway ERP</div>
+          <div style={{fontSize:14,color:co.t3,marginBottom:28}}>Start by adding agents, agencies, and candidates to get started.</div>
+          <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
+            <Btn v="gold" onClick={()=>go("agents")}>+ Add Agent</Btn>
+            <Btn v="navy" onClick={()=>go("agencies")}>+ Add Agency</Btn>
+            <Btn v="ghost" onClick={()=>go("candidates")}>+ Add Candidate</Btn>
+          </div>
+        </div>
+      ):(
+      <div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:11,marginBottom:18}}>
+          {[["Total",stats.total,"👤",co.navy2],["In Progress",stats.inProgress,"⚙️",co.blue],["Flight Ready",stats.flightReady,"✈️",co.gold],["Completed",stats.done,"🪪",co.green,"Iqama received"],["Docs Pending",stats.docsPending,"📋",co.red]].map(([lbl,val,ic,clr,hint])=>(
+            <div key={lbl} style={{...CARD,borderTop:`3px solid ${clr}`,textAlign:"center"}}>
+              <div style={{fontSize:24,marginBottom:3}}>{ic}</div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:32,fontWeight:700,color:clr,lineHeight:1}}>{val}</div>
+              <div style={{fontSize:9,color:co.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:.7,marginTop:4}}>{lbl}</div>
+              {hint&&<div style={{fontSize:9,color:co.gold,marginTop:3,fontStyle:"italic"}}>{hint}</div>}
+            </div>
+          ))}
+        </div>
+        {/* Returned Passports List */}
+        {(data.passport_returns||[]).length>0&&(
+          <div style={{...CARD,marginBottom:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <SecTitle c="📘 Returned Passports"/>
+              <span style={{background:co.red3,color:co.red,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>{(data.passport_returns||[]).length}</span>
+            </div>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead><tr style={{background:co.navy}}>
+                {["Code","Name","Passport No","Stage","Reason","Date"].map(h=>(
+                  <th key={h} style={{padding:"7px 9px",color:co.gold,fontSize:9,fontWeight:700,textTransform:"uppercase",textAlign:"left"}}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {[...(data.passport_returns||[])].reverse().map((r,i)=>(
+                  <tr key={r.id} onClick={()=>go("detail",r.candidate_id,"dashboard")}
+                    style={{cursor:"pointer",borderBottom:`1px solid ${co.border}`,background:i%2===0?"#fafaf8":co.white}}>
+                    <td style={{padding:"7px 9px"}}><span style={{background:co.navy,color:co.gold,borderRadius:5,padding:"2px 6px",fontSize:10,fontWeight:700,fontFamily:"monospace"}}>{r.ro_code||"—"}</span></td>
+                    <td style={{padding:"7px 9px",fontWeight:600}}>{r.name}</td>
+                    <td style={{padding:"7px 9px",color:co.t3,fontFamily:"monospace",fontSize:11}}>{r.passport_no||"—"}</td>
+                    <td style={{padding:"7px 9px",fontSize:11,color:co.t3,textTransform:"capitalize"}}>{r.stage_at_return?.replace("_"," ")||"—"}</td>
+                    <td style={{padding:"7px 9px"}}><span style={{background:co.red3,color:co.red,borderRadius:5,padding:"2px 7px",fontSize:10,fontWeight:600}}>{r.reason}</span></td>
+                    <td style={{padding:"7px 9px",color:co.t3,fontSize:11}}>{r.returned_at}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+          <div style={CARD}>
+            <SecTitle c="⚠️ Alerts & Reminders"/>
+            {alerts.length===0?<div style={{color:co.green,fontWeight:600,fontSize:12,padding:"8px 0"}}>✅ All clear — no pending alerts!</div>
+            :alerts.map((a,i)=>(
+              <div key={i} onClick={()=>go("detail",a.id,"dashboard")} style={{display:"flex",gap:8,padding:"6px 9px",borderRadius:6,background:a.type==="danger"?co.red3:co.orange3,border:`1px solid ${a.type==="danger"?"#f5c6cb":"#fed7aa"}`,cursor:"pointer",marginBottom:5,alignItems:"flex-start"}}>
+                <span style={{flexShrink:0}}>{a.type==="danger"?"🔴":"🟡"}</span>
+                <span style={{fontSize:11,color:a.type==="danger"?co.red:co.orange,lineHeight:1.4}}>{a.msg}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
+            {/* Visa Expiry List */}
+            <div style={CARD}>
+              <SecTitle c="🛂 Visa Expiry Status"/>
+              {visaExpiryList.length===0
+                ?<div style={{color:co.t3,fontSize:12,padding:"8px 0"}}>No visa data yet.</div>
+                :<div>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                    <thead><tr style={{background:co.navy}}>
+                      {["Name","Passport","Visa Date","Expiry","Days Left"].map(h=>(
+                        <th key={h} style={{padding:"6px 8px",color:co.gold,fontSize:9,fontWeight:700,textTransform:"uppercase",textAlign:"left"}}>{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody>
+                      {visaExpiryList.map((c,i)=>{
+                        const expired=c.days_left<0;
+                        const urgent=c.days_left>=0&&c.days_left<=14;
+                        const warn=c.days_left>14&&c.days_left<=30;
+                        const clr=expired?co.red:urgent?co.orange:warn?co.gold:co.green;
+                        const bg=expired?co.red3:urgent?co.orange3:warn?"#fef9ec":co.green3;
+                        return(
+                          <tr key={c.id} onClick={()=>go("detail",c.id,"dashboard")}
+                            style={{cursor:"pointer",borderBottom:`1px solid ${co.border}`,background:i%2===0?"#fafaf8":co.white}}>
+                            <td style={{padding:"7px 8px",fontWeight:600,fontSize:12}}>{c.name}</td>
+                            <td style={{padding:"7px 8px",color:co.t3,fontSize:11,fontFamily:"monospace"}}>{c.passport_no||"—"}</td>
+                            <td style={{padding:"7px 8px",color:co.t3,fontSize:11}}>{c.visa_date}</td>
+                            <td style={{padding:"7px 8px",fontSize:11}}>{c.expiry_date}</td>
+                            <td style={{padding:"7px 8px"}}>
+                              <span style={{background:bg,color:clr,borderRadius:12,padding:"2px 9px",fontSize:11,fontWeight:700}}>
+                                {expired?`Expired ${Math.abs(c.days_left)}d ago`:`${c.days_left}d`}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              }
+            </div>
+            {/* Departures This Week */}
+            <div style={CARD}>
+              <SecTitle c="✈️ Departures This Week"/>
+              {departures.length===0?<div style={{color:co.t3,fontSize:12,padding:"8px 0"}}>No departures this week.</div>
+              :departures.map(c=>{const fl=data.flight[c.id];return(
+                <div key={c.id} onClick={()=>go("detail",c.id,"dashboard")} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${co.border}`,cursor:"pointer"}}>
+                  <div><div style={{fontWeight:700,fontSize:13,color:co.navy}}>{c.name}</div><div style={{fontSize:11,color:co.t3}}>{c.country} · {c.job_category}</div></div>
+                  <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:co.blue}}>{fl.flight_date}</div><div style={{fontSize:10,color:co.t3}}>{fl.airline||"—"}</div></div>
+                </div>
+              );})}
+            </div>
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+          <div style={CARD}>
+            <SecTitle c="🤝 Agent-wise Summary"/>
+            {agentRows.length===0?<div style={{color:co.t3,fontSize:12}}>No agent data yet.</div>:(
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <thead><tr style={{background:co.navy}}>{["Agent","Area","Total","Active","Done"].map(h=><th key={h} style={{padding:"7px 9px",textAlign:"left",color:co.gold,fontSize:9,fontWeight:700,textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
+                <tbody>{agentRows.map((a,i)=>(
+                  <tr key={a.id} onClick={()=>go("agent_profile",a.id)} style={{background:i%2===0?"#fafaf8":co.white,borderBottom:`1px solid ${co.border}`,cursor:"pointer"}}>
+                    <td style={{padding:"7px 9px",fontWeight:700,color:co.navy}}>{a.name}</td>
+                    <td style={{padding:"7px 9px",color:co.t3,fontSize:11}}>{a.area}</td>
+                    <td style={{padding:"7px 9px",fontWeight:700}}>{a.total}</td>
+                    <td style={{padding:"7px 9px",color:co.blue,fontWeight:600}}>{a.active}</td>
+                    <td style={{padding:"7px 9px",color:co.green,fontWeight:600}}>{a.done}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            )}
+          </div>
+          <div style={CARD}>
+            <SecTitle c="📊 Pipeline Overview"/>
+            <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+              {STAGES.map(st=>{const cnt=stageCounts[st.id]||0;return(
+                <div key={st.id} onClick={()=>go("candidates",null,null,st.id)} style={{background:cnt>0?co.navy:"#f5f4f2",color:cnt>0?"#fff":co.t3,borderRadius:8,padding:"8px 11px",textAlign:"center",minWidth:74,cursor:"pointer",border:`1px solid ${cnt>0?co.navy3:co.border}`,transition:"transform .1s"}} onMouseEnter={e=>e.currentTarget.style.transform="scale(1.05)"} onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+                  <div style={{fontSize:16}}>{st.icon}</div>
+                  <div style={{fontSize:9,fontWeight:600,marginTop:2,lineHeight:1.2}}>{st.label}</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:cnt>0?co.gold:"#ccc",lineHeight:1.1,marginTop:2}}>{cnt}</div>
+                </div>
+              );})}
+            </div>
+          </div>
+        </div>
+      </div>
+      )}
+      <AddCandModal open={showAdd} onClose={()=>setShowAdd(false)} data={data} upd={upd}/>
+      <Modal open={showReset&&resetStep===1} onClose={()=>setShowReset(false)} title="⚠️ Reset All Data" width={420}>
+        <p style={{color:co.t2,fontSize:14,marginBottom:16,lineHeight:1.6}}>এই action টি সমস্ত candidates, agents, agencies, এবং সব data <strong style={{color:co.red}}>চিরতরে মুছে</strong> ফেলবে। এটি undo করা যাবে না।</p>
+        <p style={{color:co.red,fontWeight:700,fontSize:13,marginBottom:20}}>আপনি কি নিশ্চিত?</p>
+        <div style={{display:"flex",gap:9,justifyContent:"flex-end"}}><Btn v="ghost" onClick={()=>setShowReset(false)}>Cancel</Btn><Btn v="orange" onClick={()=>setResetStep(2)}>হ্যাঁ, মুছতে চাই →</Btn></div>
+      </Modal>
+      <Modal open={showReset&&resetStep===2} onClose={()=>setShowReset(false)} title="🔴 Final Confirmation" width={420}>
+        <p style={{color:co.red,fontWeight:700,fontSize:14,marginBottom:8,lineHeight:1.6}}>FINAL WARNING:</p>
+        <p style={{color:co.t2,fontSize:13,marginBottom:20,lineHeight:1.6}}>সব data permanently delete হবে।<br/><strong>এটি কোনোভাবেই ফিরিয়ে আনা সম্ভব নয়।</strong></p>
+        <div style={{display:"flex",gap:9,justifyContent:"flex-end"}}><Btn v="ghost" onClick={()=>setShowReset(false)}>Cancel</Btn><Btn v="red" onClick={()=>{resetAll();setShowReset(false);}}>🗑️ সব মুছে ফেলো</Btn></div>
+      </Modal>
+    </div>
+  );
+}
+
+// ── Candidates List ───────────────────────────────────────────────
+function CandList({data,go,upd,initStageFilter=""}){
+  const [search,setSearch]=useState(""); const [fAgent,setFA]=useState(""); const [fCountry,setFC]=useState(""); const [fStage,setFS]=useState(initStageFilter||""); const [dFrom,setDF]=useState(""); const [dTo,setDT]=useState(""); const [showArc,setSA]=useState(false); const [sortCol,setSC]=useState("ro_code"); const [sortDir,setSD]=useState("desc"); const [pg,setPg]=useState(1); const [showAdd,setShowAdd]=useState(false);
+  useEffect(()=>{if(initStageFilter)setFS(initStageFilter);},[initStageFilter]);
+  const PER=20;
+  const filtered=useMemo(()=>{
+    let l=data.candidates.filter(c=>showArc?c.archived:!c.archived);
+    if(search)l=l.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||c.passport_no.toLowerCase().includes(search.toLowerCase())||(c.phone||"").includes(search));
+    if(fAgent)l=l.filter(c=>c.agent_id===fAgent); if(fCountry)l=l.filter(c=>c.country===fCountry); if(fStage)l=l.filter(c=>c.current_stage===fStage);
+    if(dFrom)l=l.filter(c=>c.created_at>=dFrom); if(dTo)l=l.filter(c=>c.created_at<=dTo);
+    l.sort((a,b)=>{if(sortCol==="ro_code"){const na=parseInt((a.ro_code||"RO-0").replace("RO-",""))||0,nb=parseInt((b.ro_code||"RO-0").replace("RO-",""))||0;return sortDir==="asc"?na-nb:nb-na;}const va=a[sortCol]||"",vb=b[sortCol]||"";return sortDir==="asc"?va.localeCompare(vb):vb.localeCompare(va);});
+    return l;
+  },[data.candidates,search,fAgent,fCountry,fStage,dFrom,dTo,showArc,sortCol,sortDir]);
+  const pages=Math.ceil(filtered.length/PER)||1;
+  const paged=filtered.slice((pg-1)*PER,pg*PER);
+  const ts=col=>{if(sortCol===col)setSD(d=>d==="asc"?"desc":"asc");else{setSC(col);setSD("asc");}setPg(1);};
+  function Th({col,label}){return(<th onClick={()=>ts(col)} style={{padding:"9px 10px",textAlign:"left",color:co.gold,fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:.6,cursor:"pointer",userSelect:"none",background:co.navy,whiteSpace:"nowrap"}}>{label} {sortCol===col?(sortDir==="asc"?"↑":"↓"):<span style={{opacity:.3}}>↕</span>}</th>);}
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <h2 style={{fontFamily:"'Playfair Display',serif",color:co.navy,fontSize:22,fontWeight:700}}>Candidates</h2>
+        <div style={{display:"flex",gap:8}}>
+          <Btn v="ghost" sz="sm" onClick={()=>{setSA(p=>!p);setPg(1);}}>{showArc?"📋 Active":"🗃️ Archived"}</Btn>
+          <Btn v="gold" onClick={()=>setShowAdd(true)}>+ Add Candidate</Btn>
+        </div>
+      </div>
+      <div style={{...CARD,marginBottom:12,padding:"12px 14px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:9,alignItems:"end"}}>
+          <div><Lbl c="Search"/><input value={search} onChange={e=>{setSearch(e.target.value);setPg(1);}} placeholder="Name / Passport / Phone…" style={{...INP,fontSize:12}}/></div>
+          <div><Lbl c="Agent"/><select value={fAgent} onChange={e=>{setFA(e.target.value);setPg(1);}} style={{...SEL,fontSize:12}}><option value="">All Agents</option>{data.agents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+          <div><Lbl c="Country"/><select value={fCountry} onChange={e=>{setFC(e.target.value);setPg(1);}} style={{...SEL,fontSize:12}}><option value="">All Countries</option>{COUNTRIES.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
+          <div><Lbl c="Stage"/><select value={fStage} onChange={e=>{setFS(e.target.value);setPg(1);}} style={{...SEL,fontSize:12}}><option value="">All Stages</option>{STAGES.map(s=><option key={s.id} value={s.id}>{s.icon} {s.label}</option>)}</select></div>
+          <div><Lbl c="From"/><input type="date" value={dFrom} onChange={e=>{setDF(e.target.value);setPg(1);}} style={{...INP,fontSize:12}}/></div>
+          <div><Lbl c="To"/><input type="date" value={dTo} onChange={e=>{setDT(e.target.value);setPg(1);}} style={{...INP,fontSize:12}}/></div>
+          <Btn v="ghost" sz="sm" onClick={()=>{setSearch("");setFA("");setFC("");setFS("");setDF("");setDT("");setPg(1);}}>✕ Clear</Btn>
+        </div>
+        <div style={{marginTop:7,fontSize:11,color:co.t3}}>Showing <b>{filtered.length}</b> of <b>{data.candidates.filter(c=>showArc?c.archived:!c.archived).length}</b> {showArc?"archived":"active"} candidates</div>
+      </div>
+      <div style={{...CARD,padding:0,overflow:"hidden"}}>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead><tr><th style={{padding:"9px 10px",color:co.gold,fontSize:9,fontWeight:700,textTransform:"uppercase",background:co.navy,textAlign:"center",width:70}}>Code</th><Th col="name" label="Name"/><th style={{padding:"9px 10px",color:co.gold,fontSize:9,fontWeight:700,textTransform:"uppercase",background:co.navy}}>Agent</th><Th col="country" label="Country"/><th style={{padding:"9px 10px",color:co.gold,fontSize:9,fontWeight:700,textTransform:"uppercase",background:co.navy}}>Days</th><Th col="current_stage" label="Stage"/><Th col="created_at" label="Added"/><th style={{padding:"9px 10px",background:co.navy}}/></tr></thead>
+            <tbody>
+              {paged.map((c,i)=>{
+                const ag=data.agents.find(a=>a.id===c.agent_id);
+                const days=procDays(c); const pexp=ppLeft(c.passport_expiry);
+                const sl=(pg-1)*PER+i+1;
+                return(<tr key={c.id} style={{background:i%2===0?"#fafaf8":co.white,borderBottom:`1px solid ${co.border}`,cursor:"pointer",opacity:c.archived?.6:1}} onClick={()=>go("detail",c.id,"candidates")}>
+                  <td style={{padding:"8px 10px",textAlign:"center",width:70}}><span style={{background:co.navy,color:co.gold,borderRadius:5,padding:"2px 7px",fontSize:10,fontWeight:700,fontFamily:"monospace"}}>{c.ro_code||"—"}</span></td>
+                  <td style={{padding:"8px 10px"}}><div style={{fontWeight:700,color:co.navy}}>{c.name}</div><div style={{fontSize:10,color:co.t3,fontFamily:"monospace",display:"flex",alignItems:"center",gap:2}}>{c.passport_no}<CopyBtn text={c.passport_no}/></div>{pexp!==null&&pexp<=90&&<div style={{fontSize:9,color:pexp<0?"#b91c1c":co.orange,fontWeight:700,marginTop:1}}>{pexp<0?"⚠️ PP Expired":`⚠️ PP: ${pexp}d left`}</div>}</td>
+                  <td style={{padding:"8px 10px",fontSize:11,color:co.t2}}>{ag?.name||"—"}</td>
+                  <td style={{padding:"8px 10px",fontSize:11}}>{c.country}</td>
+                  <td style={{padding:"8px 10px"}}>{days!==null&&<span style={{background:days>90?co.red3:days>30?co.orange3:co.green3,color:days>90?co.red:days>30?co.orange:co.green,padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:700}}>{days}d</span>}</td>
+                  <td style={{padding:"8px 10px"}}><StageBadge stage={c.current_stage}/></td>
+                  <td style={{padding:"8px 10px",color:co.t3,fontSize:10}}>{c.created_at}</td>
+                  <td style={{padding:"8px 10px"}}><Btn sz="sm" v="navy" onClick={e=>{e.stopPropagation();go("detail",c.id,"candidates");}}>View →</Btn></td>
+                </tr>);
+              })}
+              {paged.length===0&&<tr><td colSpan={8} style={{padding:40,textAlign:"center",color:co.t3}}>{showArc?"No archived candidates.":"No candidates yet. Click '+ Add Candidate' to get started."}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        {pages>1&&(<div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:5,padding:"10px 14px",borderTop:`1px solid ${co.border}`,flexWrap:"wrap"}}>
+          <Btn v="ghost" sz="sm" onClick={()=>setPg(p=>Math.max(1,p-1))} sx={{opacity:pg===1?.4:1}}>‹ Prev</Btn>
+          {Array.from({length:pages},(_,i)=>i+1).filter(p=>p===1||p===pages||Math.abs(p-pg)<=2).reduce((acc,p,i,arr)=>{if(i>0&&arr[i-1]!==p-1)acc.push("…");acc.push(p);return acc;},[]).map((p,i)=>p==="…"?<span key={i} style={{color:co.t3,padding:"0 3px"}}>…</span>:<button key={p} onClick={()=>setPg(p)} style={{background:p===pg?co.navy:"transparent",color:p===pg?co.gold:co.t3,border:`1.5px solid ${p===pg?co.navy:co.border}`,borderRadius:5,padding:"3px 9px",fontSize:11,cursor:"pointer",fontWeight:p===pg?700:400}}>{p}</button>)}
+          <Btn v="ghost" sz="sm" onClick={()=>setPg(p=>Math.min(pages,p+1))} sx={{opacity:pg===pages?.4:1}}>Next ›</Btn>
+          <span style={{fontSize:10,color:co.t3}}>Page {pg}/{pages}</span>
+        </div>)}
+      </div>
+      <AddCandModal open={showAdd} onClose={()=>setShowAdd(false)} data={data} upd={upd}/>
+    </div>
+  );
+}
+
+// Bug 4: Added photo_with_passport + police_clearance to CE
+const CE={name:"",passport_no:"",passport_expiry:"",dob:"",phone:"",agent_id:"",country:"",job_category:"",visa_type:"Company Visa",company_name:"",notes:"",photo_with_passport:false,police_clearance:false,receipt_given:false,receipt_handler:"agent",finger_slip_given:false};
+
+function AddCandModal({open,onClose,data,upd}){
+  const [f,setF]=useState(CE); const [err,setErr]=useState("");
+  const set=k=>e=>setF(p=>({...p,[k]:e.target.value}));
+  const submit=()=>{
+    if(!f.name.trim())return setErr("Name is required.");
+    if(!f.passport_no.trim())return setErr("Passport No is required.");
+    if(!f.agent_id)return setErr("Please select an agent.");
+    const dup=data.candidates.find(c=>c.passport_no.trim().toLowerCase()===f.passport_no.trim().toLowerCase());
+    if(dup)return setErr(`Passport No already exists — ${dup.name}`);
+    const nc={...f,id:uid("c"),ro_code:genROCode(data.candidates),current_stage:"passport_in",archived:false,created_at:today()};
+    // Sync documents
+    const docPatch={...data.documents,[nc.id]:{...(data.documents?.[nc.id]||{}),photo_with_passport:!!f.photo_with_passport,police_clearance:!!f.police_clearance,...(f.finger_slip_given?{finger_slip:true}:{})}};
+    // Change 2: sync mofa receipt fields
+    const mofaPatch={...data.mofa,[nc.id]:{...(data.mofa?.[nc.id]||{}),receipt_given:!!f.receipt_given,receipt_handler:f.receipt_given?(f.receipt_handler||"office"):"agent"}};
+    // Change 3: sync finger fields
+    const fingerPatch=f.finger_slip_given?{...data.finger,[nc.id]:{...(data.finger?.[nc.id]||{}),finger_done:true,slip_received:true}}:{...data.finger};
+    upd({candidates:[...data.candidates,nc],documents:docPatch,mofa:mofaPatch,finger:fingerPatch,stage_logs:[...data.stage_logs,{id:uid("sl"),candidate_id:nc.id,stage:"passport_in",note:"Candidate registered — passport received",changed_at:today()}]});
+    setF(CE);setErr("");onClose();
+  };
+  return(<Modal open={open} onClose={()=>{setErr("");onClose();}} title="Add New Candidate" width={640}>
+    <ErrBox msg={err}/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 16px"}}>
+      <FInput label="Full Name *" value={f.name} onChange={set("name")} placeholder="Abdur Rahman"/>
+      <FInput label="Passport No *" value={f.passport_no} onChange={set("passport_no")} placeholder="BC1234567"/>
+      <FInput label="Passport Expiry" type="date" value={f.passport_expiry} onChange={set("passport_expiry")}/>
+      <div style={{marginBottom:13}}>
+        <Lbl c="Date of Birth"/>
+        <input type="date" value={f.dob} onChange={set("dob")} style={{...INP}} onFocus={e=>{e.target.style.borderColor=co.gold;e.target.style.boxShadow="0 0 0 2px rgba(201,168,76,.15)"}} onBlur={e=>{e.target.style.borderColor=co.border;e.target.style.boxShadow="none"}}/>
+        {f.dob&&(()=>{const d=new Date(f.dob),n=new Date();let y=n.getFullYear()-d.getFullYear(),m=n.getMonth()-d.getMonth(),day=n.getDate()-d.getDate();if(day<0){m--;day+=new Date(n.getFullYear(),n.getMonth(),0).getDate();}if(m<0){y--;m+=12;}return <div style={{fontSize:11,color:co.t3,marginTop:4,paddingLeft:2}}>🎂 Age: <b style={{color:co.navy}}>{y} years, {m} months, {day} days</b></div>;})()}
+      </div>
+      <FInput label="Phone" value={f.phone} onChange={set("phone")} placeholder="01711-000000"/>
+      <FSelect label="Agent *" value={f.agent_id} onChange={set("agent_id")}><option value="">Select Agent</option>{data.agents.map(a=><option key={a.id} value={a.id}>{a.name} — {a.area}</option>)}</FSelect>
+      <ComboInput label="Country" value={f.country} onChange={v=>setF(p=>({...p,country:v}))} options={COUNTRIES} placeholder="Type or select country"/>
+      <FSelect label="Job Category" value={f.job_category} onChange={set("job_category")}><option value="">Select Job</option>{JOBS.map(j=><option key={j} value={j}>{j}</option>)}</FSelect>
+      <FSelect label="Visa Type" value={f.visa_type} onChange={set("visa_type")}>{VTYPES.map(v=><option key={v} value={v}>{v}</option>)}</FSelect>
+      <FInput label="Company Name" value={f.company_name} onChange={set("company_name")} placeholder="(for Company Visa)" mb={0}/>
+    </div>
+    {/* Documents & Receipt — Add Modal */}
+    <div style={{margin:"13px 0 4px",borderRadius:8,border:`1px solid ${co.border}`,overflow:"hidden"}}>
+      <div style={{background:co.navy,padding:"7px 14px"}}><span style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:co.gold}}>Documents Received</span></div>
+      <div style={{padding:"11px 14px",background:co.bg,display:"flex",flexWrap:"wrap",gap:14}}>
+        <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:co.navy}}>
+          <input type="checkbox" checked={!!f.photo_with_passport} onChange={e=>setF(p=>({...p,photo_with_passport:e.target.checked}))} style={{accentColor:co.navy,width:14,height:14}}/>
+          📷 Photo with Passport
+        </label>
+        <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:co.navy}}>
+          <input type="checkbox" checked={!!f.police_clearance} onChange={e=>setF(p=>({...p,police_clearance:e.target.checked}))} style={{accentColor:co.navy,width:14,height:14}}/>
+          🛡️ Police Clearance
+        </label>
+        <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:co.navy}}>
+          <input type="checkbox" checked={!!f.finger_slip_given} onChange={e=>setF(p=>({...p,finger_slip_given:e.target.checked}))} style={{accentColor:co.navy,width:14,height:14}}/>
+          👆 Finger Slip Received
+        </label>
+      </div>
+      <div style={{borderTop:`1px solid ${co.border}`,background:co.navy,padding:"7px 14px"}}><span style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:co.gold}}>🧾 Medical Receipt</span></div>
+      <div style={{padding:"11px 14px",background:co.bg,display:"flex",gap:14,alignItems:"center",flexWrap:"wrap"}}>
+        <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:co.navy}}>
+          <input type="radio" name="receipt_given_add" checked={!!f.receipt_given} onChange={()=>setF(p=>({...p,receipt_given:true,receipt_handler:p.receipt_handler==="agent"?"office":p.receipt_handler}))} style={{accentColor:co.navy,width:14,height:14}}/>
+          ✅ Received
+        </label>
+        <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:co.navy}}>
+          <input type="radio" name="receipt_given_add" checked={!f.receipt_given} onChange={()=>setF(p=>({...p,receipt_given:false,receipt_handler:"agent"}))} style={{accentColor:co.navy,width:14,height:14}}/>
+          ❌ Not Received — Agent Handles
+        </label>
+        {f.receipt_given&&(
+          <select value={f.receipt_handler||"office"} onChange={e=>setF(p=>({...p,receipt_handler:e.target.value}))} style={{...SEL,width:"auto",fontSize:12,padding:"5px 9px"}}>
+            <option value="office">Handler: Office</option>
+            <option value="agency">Handler: Agency</option>
+          </select>
+        )}
+        {!f.receipt_given&&<span style={{fontSize:11,color:co.t3,fontStyle:"italic"}}>Handler: Agent (default)</span>}
+      </div>
+    </div>
+    <FTextarea label="Notes" value={f.notes} onChange={set("notes")} rows={2} placeholder="Any notes…" style={{marginTop:4}}/>
+    <div style={{display:"flex",gap:9,justifyContent:"flex-end",marginTop:4}}><Btn v="ghost" onClick={()=>{setErr("");onClose();}}>Cancel</Btn><Btn v="gold" onClick={submit}>Add Candidate</Btn></div>
+  </Modal>);
+}
+
+// Bug 11: EditCandModal — same checkboxes + docs sync
+function EditCandModal({open,onClose,cand,data,upd}){
+  const [f,setF]=useState({}); const [err,setErr]=useState("");
+  useEffect(()=>{if(cand)setF({photo_with_passport:false,police_clearance:false,receipt_given:false,receipt_handler:"agent",finger_slip_given:false,...cand});},[cand]);
+  const set=k=>e=>setF(p=>({...p,[k]:e.target.value}));
+  const submit=()=>{
+    if(!f.name.trim())return setErr("Name required.");
+    if(!f.passport_no.trim())return setErr("Passport No required.");
+    const dup=data.candidates.find(c=>c.id!==f.id&&c.passport_no.trim().toLowerCase()===f.passport_no.trim().toLowerCase());
+    if(dup)return setErr(`Passport No already used by ${dup.name}`);
+    const docPatch={...data.documents,[f.id]:{...(data.documents?.[f.id]||{}),photo_with_passport:!!f.photo_with_passport,police_clearance:!!f.police_clearance,...(f.finger_slip_given?{finger_slip:true}:{})}};
+    const mofaPatch={...data.mofa,[f.id]:{...(data.mofa?.[f.id]||{}),receipt_given:!!f.receipt_given,receipt_handler:f.receipt_given?(f.receipt_handler||"office"):"agent"}};
+    const fingerPatch=f.finger_slip_given?{...data.finger,[f.id]:{...(data.finger?.[f.id]||{}),finger_done:true,slip_received:true}}:{...data.finger};
+    upd({candidates:data.candidates.map(c=>c.id===f.id?{...c,...f}:c),documents:docPatch,mofa:mofaPatch,finger:fingerPatch});
+    setErr("");onClose();
+  };
+  if(!cand)return null;
+  return(<Modal open={open} onClose={()=>{setErr("");onClose();}} title="Edit Candidate Info" width={640}>
+    <ErrBox msg={err}/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 16px"}}>
+      <FInput label="Full Name *" value={f.name||""} onChange={set("name")}/>
+      <FInput label="Passport No *" value={f.passport_no||""} onChange={set("passport_no")}/>
+      <FInput label="Passport Expiry" type="date" value={f.passport_expiry||""} onChange={set("passport_expiry")}/>
+      <div style={{marginBottom:13}}>
+        <Lbl c="Date of Birth"/>
+        <input type="date" value={f.dob||""} onChange={set("dob")} style={{...INP}} onFocus={e=>{e.target.style.borderColor=co.gold;e.target.style.boxShadow="0 0 0 2px rgba(201,168,76,.15)"}} onBlur={e=>{e.target.style.borderColor=co.border;e.target.style.boxShadow="none"}}/>
+        {f.dob&&(()=>{const d=new Date(f.dob),n=new Date();let y=n.getFullYear()-d.getFullYear(),m=n.getMonth()-d.getMonth(),day=n.getDate()-d.getDate();if(day<0){m--;day+=new Date(n.getFullYear(),n.getMonth(),0).getDate();}if(m<0){y--;m+=12;}return <div style={{fontSize:11,color:co.t3,marginTop:4,paddingLeft:2}}>🎂 Age: <b style={{color:co.navy}}>{y} years, {m} months, {day} days</b></div>;})()}
+      </div>
+      <FInput label="Phone" value={f.phone||""} onChange={set("phone")}/>
+      <FSelect label="Agent" value={f.agent_id||""} onChange={set("agent_id")}><option value="">Select Agent</option>{data.agents.map(a=><option key={a.id} value={a.id}>{a.name} — {a.area}</option>)}</FSelect>
+      <ComboInput label="Country" value={f.country||""} onChange={v=>setF(p=>({...p,country:v}))} options={COUNTRIES} placeholder="Type or select country"/>
+      <FSelect label="Job Category" value={f.job_category||""} onChange={set("job_category")}><option value="">Select</option>{JOBS.map(j=><option key={j} value={j}>{j}</option>)}</FSelect>
+      <FSelect label="Visa Type" value={f.visa_type||""} onChange={set("visa_type")}>{VTYPES.map(v=><option key={v} value={v}>{v}</option>)}</FSelect>
+      <FInput label="Company Name" value={f.company_name||""} onChange={set("company_name")} mb={0}/>
+    </div>
+    {/* Documents & Receipt — Edit Modal */}
+    <div style={{margin:"13px 0 4px",borderRadius:8,border:`1px solid ${co.border}`,overflow:"hidden"}}>
+      <div style={{background:co.navy,padding:"7px 14px"}}><span style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:co.gold}}>Documents Received</span></div>
+      <div style={{padding:"11px 14px",background:co.bg,display:"flex",flexWrap:"wrap",gap:14}}>
+        <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:co.navy}}>
+          <input type="checkbox" checked={!!f.photo_with_passport} onChange={e=>setF(p=>({...p,photo_with_passport:e.target.checked}))} style={{accentColor:co.navy,width:14,height:14}}/>
+          📷 Photo with Passport
+        </label>
+        <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:co.navy}}>
+          <input type="checkbox" checked={!!f.police_clearance} onChange={e=>setF(p=>({...p,police_clearance:e.target.checked}))} style={{accentColor:co.navy,width:14,height:14}}/>
+          🛡️ Police Clearance
+        </label>
+        <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:co.navy}}>
+          <input type="checkbox" checked={!!f.finger_slip_given} onChange={e=>setF(p=>({...p,finger_slip_given:e.target.checked}))} style={{accentColor:co.navy,width:14,height:14}}/>
+          👆 Finger Slip Received
+        </label>
+      </div>
+      <div style={{borderTop:`1px solid ${co.border}`,background:co.navy,padding:"7px 14px"}}><span style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:co.gold}}>🧾 Medical Receipt</span></div>
+      <div style={{padding:"11px 14px",background:co.bg,display:"flex",gap:14,alignItems:"center",flexWrap:"wrap"}}>
+        <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:co.navy}}>
+          <input type="radio" name="receipt_given_edit" checked={!!f.receipt_given} onChange={()=>setF(p=>({...p,receipt_given:true,receipt_handler:p.receipt_handler==="agent"?"office":p.receipt_handler}))} style={{accentColor:co.navy,width:14,height:14}}/>
+          ✅ Received
+        </label>
+        <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:co.navy}}>
+          <input type="radio" name="receipt_given_edit" checked={!f.receipt_given} onChange={()=>setF(p=>({...p,receipt_given:false,receipt_handler:"agent"}))} style={{accentColor:co.navy,width:14,height:14}}/>
+          ❌ Not Received — Agent Handles
+        </label>
+        {f.receipt_given&&(
+          <select value={f.receipt_handler||"office"} onChange={e=>setF(p=>({...p,receipt_handler:e.target.value}))} style={{...SEL,width:"auto",fontSize:12,padding:"5px 9px"}}>
+            <option value="office">Handler: Office</option>
+            <option value="agency">Handler: Agency</option>
+          </select>
+        )}
+        {!f.receipt_given&&<span style={{fontSize:11,color:co.t3,fontStyle:"italic"}}>Handler: Agent (default)</span>}
+      </div>
+    </div>
+    <FTextarea label="Notes" value={f.notes||""} onChange={set("notes")} rows={2} style={{marginTop:4}}/>
+    <div style={{display:"flex",gap:9,justifyContent:"flex-end",marginTop:4}}><Btn v="ghost" onClick={()=>{setErr("");onClose();}}>Cancel</Btn><Btn v="gold" onClick={submit}>Save Changes</Btn></div>
+  </Modal>);
+}
+
+// ── Candidate Detail (Tab-based UI) ───────────────────────────────
+// ── Passport Return Modal ──────────────────────────────────
+const RETURN_REASONS=["Agent নিয়ে গেছে","Visa হয়নি","Candidate নিজে নিয়ে গেছে","Medical Unfit","Other"];
+function PassportReturnModal({open,onClose,cand,data,upd,go}){
+  const [reason,setReason]=useState("");
+  const [note,setNote]=useState("");
+  if(!open)return null;
+  const doConfirm=()=>{
+    if(!reason){alert("Please select a reason");return;}
+    const returnEntry={
+      id:uid("pr"),
+      candidate_id:cand.id,
+      name:cand.name,
+      passport_no:cand.passport_no,
+      ro_code:cand.ro_code||"",
+      agent_id:cand.agent_id,
+      stage_at_return:cand.current_stage,
+      reason,
+      note,
+      returned_at:today(),
+    };
+    upd({
+      candidates:data.candidates.map(c=>c.id===cand.id?{...c,passport_returned:true,archived:true}:c),
+      passport_returns:[...(data.passport_returns||[]),returnEntry],
+      stage_logs:[...(data.stage_logs||[]),{id:uid("sl"),candidate_id:cand.id,stage:"returned",note:`Passport returned — ${reason}`,changed_at:today()}],
+    });
+    onClose();
+    go("candidates");
+  };
+  const INP={width:"100%",padding:"8px 11px",borderRadius:6,border:`1px solid ${co.border}`,background:co.white,fontSize:13,color:co.navy,fontFamily:"DM Sans,sans-serif"};
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:co.white,borderRadius:12,width:440,boxShadow:"0 8px 32px rgba(0,0,0,.25)"}}>
+        <div style={{background:co.red,padding:"16px 20px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{color:"#fff",fontFamily:"Playfair Display,serif",fontSize:16,fontWeight:700}}>📘 Passport Return</span>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#fff",fontSize:20,cursor:"pointer"}}>✕</button>
+        </div>
+        <div style={{padding:20}}>
+          <div style={{background:co.red3,borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:12,color:co.red}}>
+            ⚠️ This will mark <b>{cand?.name}</b> as inactive and move them to the Returned Passports list.
+          </div>
+          <div style={{marginBottom:13}}>
+            <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,color:co.t3,marginBottom:5}}>Reason *</div>
+            <select style={INP} value={reason} onChange={e=>setReason(e.target.value)}>
+              <option value="">— Select Reason —</option>
+              {RETURN_REASONS.map(r=><option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,color:co.t3,marginBottom:5}}>Note (Optional)</div>
+            <textarea style={{...INP,height:72,resize:"vertical"}} value={note} onChange={e=>setNote(e.target.value)} placeholder="Additional details…"/>
+          </div>
+          <div style={{display:"flex",justifyContent:"flex-end",gap:10}}>
+            <button onClick={onClose} style={{background:co.white,border:`1px solid ${co.border}`,borderRadius:7,padding:"8px 18px",fontSize:13,cursor:"pointer",color:co.navy}}>Cancel</button>
+            <button onClick={doConfirm} style={{background:co.red,color:"#fff",border:"none",borderRadius:7,padding:"8px 22px",fontSize:13,fontWeight:700,cursor:"pointer"}}>📘 Confirm Return</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CandDetail({data,id,upd,go,prevPage}){
+  const cand=data.candidates.find(c=>c.id===id);
+  const [showEdit,setShowEdit]=useState(false);
+  const [showArc,setShowArc]=useState(false);
+  const [showReturn,setShowReturn]=useState(false);
+  const [showPermDel,setShowPermDel]=useState(false);
+  const [permDelStep,setPermDelStep]=useState(1);
+  const [note,setNote]=useState("");
+  // Tab state: default to current stage (skip passport_in)
+  const [activeTab,setActiveTab]=useState(()=>{
+    if(!cand)return"medical";
+    const s=cand.current_stage;
+    return s==="passport_in"?"medical":s;
+  });
+
+  if(!cand)return(<div style={{textAlign:"center",padding:60,color:co.t3}}>Not found.<br/><br/><Btn v="ghost" onClick={()=>go("candidates")}>← Back</Btn></div>);
+
+  const agent=data.agents.find(a=>a.id===cand.agent_id);
+  const agency=data.agencies.find(a=>a.id===cand.agency_id);
+  const si=STAGES.findIndex(s=>s.id===cand.current_stage);
+  const logs=(data.stage_logs||[]).filter(l=>l.candidate_id===id).sort((a,b)=>b.changed_at.localeCompare(a.changed_at));
+  const days=procDays(cand); const pexp=ppLeft(cand.passport_expiry);
+
+  // Bug 2+6: advance function — also auto-advances activeTab
+  const advance=(dataPatch={})=>{
+    if(si>=STAGES.length-1)return;
+    const ns=STAGES[si+1].id;
+    upd({...dataPatch,candidates:data.candidates.map(c=>c.id===id?{...c,current_stage:ns}:c),stage_logs:[...data.stage_logs,{id:uid("sl"),candidate_id:id,stage:ns,note:`Advanced to ${STAGES[si+1].label}`,changed_at:today()}]});
+    setActiveTab(ns);
+  };
+  // Change 1: double-advance passport_in → medical → agency_assign in one click
+  const advanceDouble=(dataPatch={})=>{
+    if(si+2>=STAGES.length)return;
+    const ns1=STAGES[si+1].id;
+    const ns2=STAGES[si+2].id;
+    upd({...dataPatch,
+      candidates:data.candidates.map(c=>c.id===id?{...c,current_stage:ns2}:c),
+      stage_logs:[...data.stage_logs,
+        {id:uid("sl"),candidate_id:id,stage:ns1,note:`Advanced to ${STAGES[si+1].label}`,changed_at:today()},
+        {id:uid("sl"),candidate_id:id,stage:ns2,note:`Advanced to ${STAGES[si+2].label}`,changed_at:today()},
+      ],
+    });
+    setActiveTab(ns2);
+  };
+  const addNote=()=>{if(!note.trim())return;upd({stage_logs:[...data.stage_logs,{id:uid("sl"),candidate_id:id,stage:cand.current_stage,note:note.trim(),changed_at:today()}]});setNote("");};
+  const toggleArc=()=>upd({candidates:data.candidates.map(c=>c.id===id?{...c,archived:!c.archived}:c)});
+  const permDelete=()=>{
+    const keys=["medical","mofa","finger","documents","visa","bmet","manpower","flight","iqama"];
+    const patch={candidates:data.candidates.filter(c=>c.id!==id),stage_logs:(data.stage_logs||[]).filter(l=>l.candidate_id!==id)};
+    keys.forEach(k=>{if(data[k]){const cp={...data[k]};delete cp[id];patch[k]=cp;}});
+    upd(patch);go("candidates");
+  };
+
+  // Completion banner for done stages
+  const DoneBanner=({summary})=>{
+    const tsi=STAGES.findIndex(s=>s.id===activeTab);
+    if(tsi>=si)return null;
+    return(
+      <div style={{background:co.green3,border:`1px solid ${co.green}33`,borderRadius:8,padding:"7px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:8,fontSize:12,color:co.green,fontWeight:600}}>
+        ✅ Completed{summary?" — "+summary:""}
+        <span style={{marginLeft:"auto",fontSize:10,color:co.t3,fontWeight:400}}>Editing below will update the record</span>
+      </div>
+    );
+  };
+
+  // Render active tab section
+  const renderSection=()=>{
+    const med=data.medical?.[id];
+    const medSum=med?.status==="fit"?"Fit":med?.status==="unfit"?"Unfit":"";
+    switch(activeTab){
+      case"medical":return(<div><DoneBanner summary={medSum}/><MedSection cid={id} data={data} upd={upd} cand={cand} onAdvance={advance} onAdvanceDouble={advanceDouble} candStage={cand.current_stage}/></div>);
+      case"agency_assign":return(<div><DoneBanner summary={agency?.name||""}/><AgencyAssignSection cand={cand} data={data} upd={upd} onAdvance={advance}/></div>);
+      case"mofa":return(<div><DoneBanner summary={data.mofa?.[id]?.mofa_ref_no||""}/><MofaSection cid={id} data={data} upd={upd} onAdvance={advance} candStage={cand.current_stage}/></div>);
+      case"finger":return(<div><DoneBanner summary={data.finger?.[id]?.slip_received?"Slip received":""}/><FingerSection cid={id} data={data} upd={upd} onAdvance={advance} candStage={cand.current_stage}/></div>);
+      case"documents":return(<div><DoneBanner summary=""/><DocsSection cid={id} data={data} upd={upd} onAdvance={advance} candStage={cand.current_stage}/></div>);
+      case"visa":return(<div><DoneBanner summary={data.visa?.[id]?.visa_received?"Visa received":""}/><VisaSection cid={id} data={data} upd={upd} onAdvance={advance} candStage={cand.current_stage}/></div>);
+      case"bmet":return(<div><DoneBanner summary={data.bmet?.[id]?.training_done&&data.bmet?.[id]?.finger_done?"Complete":""}/><BmetSection cid={id} data={data} upd={upd} onAdvance={advance} candStage={cand.current_stage}/></div>);
+      case"manpower":return(<div><DoneBanner summary={data.manpower?.[id]?.complete?"Complete":""}/><ManSection cid={id} data={data} upd={upd} onAdvance={advance} candStage={cand.current_stage}/></div>);
+      case"flight":return(<div><DoneBanner summary={data.flight?.[id]?.flight_date||""}/><FlightSection cid={id} data={data} upd={upd} onAdvance={advance} candStage={cand.current_stage}/></div>);
+      case"iqama":return(<div><DoneBanner summary={data.iqama?.[id]?.iqama_no||""}/><IqamaSection cid={id} data={data} upd={upd} candStage={cand.current_stage}/></div>);
+      default:return null;
+    }
+  };
+
+  return(
+    <div>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:14,flexWrap:"wrap"}}>
+        <Btn v="ghost" sz="sm" onClick={()=>go(prevPage||"candidates")}>← Back</Btn>
+        <div style={{flex:1,minWidth:200}}>
+          <h2 style={{fontFamily:"'Playfair Display',serif",color:co.navy,fontSize:21,fontWeight:700,lineHeight:1.1}}>{cand.name}</h2>
+          <div style={{fontSize:11,color:co.t3,marginTop:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            {cand.ro_code&&<span style={{background:co.navy,color:co.gold,borderRadius:5,padding:"2px 8px",fontSize:11,fontWeight:700,fontFamily:"monospace"}}>{cand.ro_code}</span>}
+            <span style={{display:"inline-flex",alignItems:"center",gap:3,fontFamily:"monospace"}}>{cand.passport_no}<CopyBtn text={cand.passport_no}/></span>
+            {cand.phone&&<><span>·</span><span>📞 {cand.phone}</span><WaBtn phone={cand.phone}/></>}
+            {days!==null&&<span style={{background:days>90?co.red3:days>30?co.orange3:co.green3,color:days>90?co.red:days>30?co.orange:co.green,padding:"1px 6px",borderRadius:4,fontSize:10,fontWeight:700}}>{days} days in process</span>}
+            {cand.archived&&<Badge label="🗃️ Archived" color={co.t3} bg="#eee"/>}
+          </div>
+        </div>
+        <StageBadge stage={cand.current_stage}/>
+        <Btn v="ghost" sz="sm" onClick={()=>setShowEdit(true)}>✏️ Edit Info</Btn>
+        <Btn v={cand.archived?"green":"ghost"} sz="sm" onClick={()=>setShowArc(true)}>{cand.archived?"♻️ Restore":"🗃️ Archive"}</Btn>
+        {!cand.archived&&!cand.passport_returned&&<Btn v="red" sz="sm" onClick={()=>setShowReturn(true)}>📘 Passport Return</Btn>}
+        {cand.archived&&<Btn v="red" sz="sm" onClick={()=>{setPermDelStep(1);setShowPermDel(true);}}>🗑️ Delete Forever</Btn>}
+      </div>
+
+      {/* Passport expiry warning — critical only */}
+      {pexp!==null&&pexp<=90&&(<div style={{background:pexp<0?co.red3:co.orange3,border:`1px solid ${pexp<0?"#f5c6cb":"#fed7aa"}`,borderRadius:8,padding:"8px 14px",marginBottom:12,fontSize:12,color:pexp<0?co.red:co.orange,fontWeight:600}}>{pexp<0?`⛔ Passport EXPIRED on ${cand.passport_expiry}!`:`⚠️ Passport expires in ${pexp} days (${cand.passport_expiry}) — Renew soon!`}</div>)}
+
+      {/* Pipeline */}
+      <div style={{...CARD,marginBottom:14,overflowX:"auto",padding:"14px 18px"}}>
+        <div style={{fontSize:9,color:co.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>Processing Pipeline</div>
+        <div style={{display:"flex",alignItems:"flex-start",minWidth:700}}>
+          {STAGES.map((st,i)=>{const done=i<si,active=i===si;return(
+            <div key={st.id} style={{display:"flex",alignItems:"center",flex:1}}>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
+                <div style={{width:28,height:28,borderRadius:"50%",background:done?co.green:active?co.gold:"#e5e2dc",display:"flex",alignItems:"center",justifyContent:"center",fontSize:done?12:11,border:active?`3px solid ${co.navy}`:"none",boxShadow:active?"0 0 0 3px rgba(201,168,76,.2)":"none",fontWeight:700,color:done?"#fff":"inherit"}}>{done?"✓":st.icon}</div>
+                <div style={{fontSize:8,color:active?co.navy:done?co.green:co.t3,fontWeight:active?700:500,marginTop:3,textAlign:"center",maxWidth:44,lineHeight:1.2}}>{st.label}</div>
+              </div>
+              {i<STAGES.length-1&&<div style={{flex:1,height:2,background:i<si?co.green:"#e5e2dc",margin:"0 1px 16px",borderRadius:2}}/>}
+            </div>
+          );})}
+        </div>
+      </div>
+
+      {/* Info + Log */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+        <div style={CARD}>
+          <SecTitle c="📄 Candidate Information"/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
+            {[["DOB",cand.dob||"—"],["Phone",cand.phone||"—"],["Country",cand.country||"—"],["Job",cand.job_category||"—"],["Visa",cand.visa_type||"—"],["Company",cand.company_name||"—"],["Agent",agent?(agent.name+" ("+agent.area+")"):("—")],["Agency",agency?.name||"Not assigned"],["PP Expiry",cand.passport_expiry||"—"],["Added",cand.created_at]].map(([k,v])=>(
+              <div key={k} style={{padding:"4px 6px",borderBottom:`1px solid ${co.border}`}}><div style={{fontSize:9,color:co.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:.6}}>{k}</div><div style={{fontSize:12,color:co.navy,fontWeight:600,marginTop:1}}>{v}</div></div>
+            ))}
+          </div>
+          {cand.notes&&<div style={{marginTop:10,padding:"7px 9px",background:co.gold3,borderRadius:5,fontSize:12,color:co.navy2,borderLeft:`3px solid ${co.gold}`}}>📝 {cand.notes}</div>}
+          <div style={{marginTop:10,display:"flex",gap:6,flexWrap:"wrap"}}>
+            {agent&&<a href={waLink(agent.phone)} target="_blank" rel="noreferrer" style={{textDecoration:"none"}}><Btn sz="sm" v="ghost">💬 WhatsApp Agent</Btn></a>}
+            {cand.phone&&<a href={waLink(cand.phone)} target="_blank" rel="noreferrer" style={{textDecoration:"none"}}><Btn sz="sm" v="ghost">💬 WhatsApp Candidate</Btn></a>}
+          </div>
+        </div>
+        <div style={CARD}>
+          <SecTitle c="📜 Activity Log"/>
+          <div style={{maxHeight:200,overflowY:"auto",marginBottom:10}}>
+            {logs.length===0&&<div style={{color:co.t3,fontSize:12,textAlign:"center",padding:"16px 0"}}>No activity yet.</div>}
+            {logs.map(l=><div key={l.id} style={{display:"flex",gap:8,fontSize:12,padding:"5px 0",borderBottom:`1px solid ${co.border}`}}><div style={{flexShrink:0}}><div style={{fontSize:9,color:co.gold,fontWeight:700,whiteSpace:"nowrap"}}>{l.changed_at}</div><div style={{fontSize:9,color:co.t3}}>{STAGES.find(s=>s.id===l.stage)?.icon}</div></div><div style={{color:co.navy,lineHeight:1.4,flex:1,fontSize:12}}>{l.note}</div></div>)}
+          </div>
+          <div style={{display:"flex",gap:7}}><input value={note} onChange={e=>setNote(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addNote()} placeholder="Add note… Enter to save" style={{flex:1,padding:"7px 10px",border:`1.5px solid ${co.border}`,borderRadius:7,fontSize:12,fontFamily:"'DM Sans',sans-serif"}}/><Btn sz="sm" v="navy" onClick={addNote}>Add</Btn></div>
+        </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div style={{background:co.navy,borderRadius:"10px 10px 0 0",display:"flex",overflowX:"auto",padding:"0 6px"}}>
+        {SECTION_TABS.map(tab=>{
+          const tsi=STAGES.findIndex(s=>s.id===tab.id);
+          const isDone=tsi<si;
+          const isCurrent=tab.id===cand.current_stage;
+          const isActive=tab.id===activeTab;
+          return(
+            <button key={tab.id} onClick={()=>setActiveTab(tab.id)} style={{padding:"11px 13px",background:"none",border:"none",borderBottom:`2.5px solid ${isActive?co.gold:"transparent"}`,color:isActive?co.gold:isDone?"#5fa872":"rgba(255,255,255,.35)",fontSize:12,fontWeight:isActive?700:400,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:5,transition:"color .15s"}}>
+              {tab.icon} {tab.label}
+              {isCurrent&&<span style={{width:5,height:5,borderRadius:"50%",background:co.gold,display:"inline-block",flexShrink:0,opacity:isActive?0:1}}/>}
+              {isDone&&<span style={{fontSize:9,color:"#5fa872",marginLeft:1}}>✓</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab Content */}
+      <div style={{background:"#f5f3ef",border:`1px solid ${co.border}`,borderTop:"none",borderRadius:"0 0 12px 12px",padding:14,minHeight:180,marginBottom:14}}>
+        {renderSection()}
+      </div>
+
+      {/* Modals */}
+      <EditCandModal open={showEdit} onClose={()=>setShowEdit(false)} cand={cand} data={data} upd={upd}/>
+      <ConfirmModal open={showArc} onClose={()=>setShowArc(false)} onConfirm={toggleArc} title={cand.archived?"Restore Candidate":"Archive Candidate"} msg={cand.archived?`Restore ${cand.name} to active list?`:`Archive ${cand.name}? Data is kept, they'll be hidden from the main list.`} confirmLabel={cand.archived?"Restore":"Archive"} v={cand.archived?"green":"orange"}/>
+      <PassportReturnModal open={showReturn} onClose={()=>setShowReturn(false)} cand={cand} data={data} upd={upd} go={go}/>
+      <Modal open={showPermDel&&permDelStep===1} onClose={()=>setShowPermDel(false)} title="🗑️ Permanently Delete" width={420}>
+        <p style={{color:co.t2,fontSize:14,marginBottom:20,lineHeight:1.6}}><strong>{cand.name}</strong> এর সব data চিরতরে মুছে যাবে। এটি undo করা যাবে না।</p>
+        <p style={{color:co.red,fontWeight:700,fontSize:13,marginBottom:20}}>আপনি কি নিশ্চিত?</p>
+        <div style={{display:"flex",gap:9,justifyContent:"flex-end"}}><Btn v="ghost" onClick={()=>setShowPermDel(false)}>Cancel</Btn><Btn v="orange" onClick={()=>setPermDelStep(2)}>হ্যাঁ, মুছতে চাই →</Btn></div>
+      </Modal>
+      <Modal open={showPermDel&&permDelStep===2} onClose={()=>setShowPermDel(false)} title="🔴 Final Confirmation" width={420}>
+        <p style={{color:co.red,fontWeight:700,fontSize:14,marginBottom:8}}>FINAL WARNING</p>
+        <p style={{color:co.t2,fontSize:13,marginBottom:20,lineHeight:1.6}}><strong>{cand.name}</strong> — সব data সম্পূর্ণরূপে মুছে ফেলা হবে। কোনোভাবেই ফিরিয়ে আনা যাবে না।</p>
+        <div style={{display:"flex",gap:9,justifyContent:"flex-end"}}><Btn v="ghost" onClick={()=>setShowPermDel(false)}>Cancel</Btn><Btn v="red" onClick={permDelete}>🗑️ Permanently Delete</Btn></div>
+      </Modal>
+    </div>
+  );
+}
+
+// ── Agency Assignment Section ─────────────────────────────────────
+function AgencyAssignSection({cand,data,upd,onAdvance}){
+  const currentAgency=data.agencies.find(a=>a.id===cand.agency_id);
+  const [selAgency,setSelAgency]=useState(cand.agency_id||"");
+  const [saved,setSaved]=useState(false);
+  useEffect(()=>setSelAgency(cand.agency_id||""),[cand.agency_id]);
+  const doSave=()=>{
+    upd({candidates:data.candidates.map(c=>c.id===cand.id?{...c,agency_id:selAgency}:c)});
+    setSaved(true);setTimeout(()=>setSaved(false),2000);
+  };
+  const canNext=cand.current_stage==="agency_assign";
+  return(
+    <div style={CARD}>
+      <SecTitle c="🏢 Agency Assignment"/>
+      <FSelect label="Processing Agency" value={selAgency} onChange={e=>setSelAgency(e.target.value)}>
+        <option value="">— Not assigned —</option>
+        {data.agencies.map(a=><option key={a.id} value={a.id}>{a.name}{a.contact_person?" — "+a.contact_person:""}</option>)}
+      </FSelect>
+      {currentAgency&&(
+        <div style={{marginBottom:8,padding:"6px 10px",background:co.green3,borderRadius:6,fontSize:12,color:co.green,fontWeight:600,display:"flex",gap:8,alignItems:"center"}}>
+          ✅ <strong>{currentAgency.name}</strong>
+          {currentAgency.phone&&<span style={{fontWeight:400,color:co.t2}}>· 📞 {currentAgency.phone}</span>}
+        </div>
+      )}
+      <SaveNextBtns saved={saved} onSave={doSave} onNext={()=>onAdvance({candidates:data.candidates.map(c=>c.id===cand.id?{...c,agency_id:selAgency}:c)})} nextLabel="MOFA" canNext={canNext}/>
+    </div>
+  );
+}
+
+// ── Medical Section — Bug 2: onNext fixed, Bug 6: no popup ────────
+function MedSection({cid,data,upd,cand,onAdvance,onAdvanceDouble,candStage}){
+  const orig=data.medical?.[cid]||{status:"pending",result_date:"",note:""};
+  const [f,setF]=useState({...orig});
+  const [saved,setSaved]=useState(false);
+  useEffect(()=>setF({...data.medical?.[cid]||{status:"pending",result_date:"",note:""}}),[cid]);
+  const set=k=>v=>setF(p=>({...p,[k]:v}));
+  const doSave=()=>{
+    upd({medical:{...data.medical,[cid]:{...f}}});
+    setSaved(true);setTimeout(()=>setSaved(false),2000);
+  };
+  // Change 1: if passport_in, one click does save + double-advance
+  const handleNext=()=>{
+    const patch={medical:{...data.medical,[cid]:{...f}}};
+    if(candStage==="passport_in"&&onAdvanceDouble)onAdvanceDouble(patch);
+    else if(onAdvance)onAdvance(patch);
+  };
+  const canNext=candStage==="medical"||candStage==="passport_in";
+  return(
+    <SC title="🏥 Medical Check">
+      <FSelect label="Status" value={f.status} onChange={e=>set("status")(e.target.value)}><option value="pending">⏳ Pending</option><option value="fit">✅ Fit</option><option value="unfit">❌ Unfit</option></FSelect>
+      <FInput label="Result Date" type="date" value={f.result_date||""} onChange={e=>set("result_date")(e.target.value)}/>
+      <FInput label="Note" value={f.note||""} onChange={e=>set("note")(e.target.value)} placeholder="Optional…" mb={8}/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
+        {f.status==="fit"&&<Badge label="✅ Fit — Continue" color={co.green} bg={co.green3}/>}
+        {f.status==="unfit"&&<Badge label="❌ UNFIT — Return passport to agent" color={co.red} bg={co.red3}/>}
+        {f.status==="pending"&&<Badge label="⏳ Awaiting result" color={co.orange} bg={co.orange3}/>}
+        {/* Change 1: single Next click — passport_in skips medical stage, goes straight to agency_assign */}
+        <SaveNextBtns saved={saved} onSave={doSave} onNext={handleNext} nextLabel="Agency Assign" canNext={canNext}/>
+      </div>
+    </SC>
+  );
+}
+
+// ── MOFA Section — Bug 8: removed info warning ────────────────────
+function MofaSection({cid,data,upd,onAdvance,candStage}){
+  const orig=data.mofa?.[cid]||{receipt_handler:"agency",receipt_given:false,update_paper_received:false,mofa_ref_no:"",date:""};
+  const [f,setF]=useState({...orig}); const [saved,setSaved]=useState(false);
+  useEffect(()=>setF({...data.mofa?.[cid]||{receipt_handler:"agency",receipt_given:false,update_paper_received:false,mofa_ref_no:"",date:""}}),[cid]);
+  const set=k=>v=>setF(p=>({...p,[k]:v}));
+  const doSave=()=>{const patch={mofa:{...data.mofa,[cid]:{...f}}};if(f.update_paper_received){patch.documents={...data.documents,[cid]:{...(data.documents?.[cid]||{}),mofa_update_paper:true}};}upd(patch);setSaved(true);setTimeout(()=>setSaved(false),2000);};
+  return(<SC title="📋 MOFA Processing">
+    <FSelect label="Receipt Handler" value={f.receipt_handler} onChange={e=>set("receipt_handler")(e.target.value)}><option value="agency">Agency</option><option value="office">Office (we go ourselves)</option><option value="agent">Agent</option></FSelect>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><FInput label="MOFA Ref No" value={f.mofa_ref_no||""} onChange={e=>set("mofa_ref_no")(e.target.value)} placeholder="MOFA-24-0000"/><FInput label="Date" type="date" value={f.date||""} onChange={e=>set("date")(e.target.value)}/></div>
+    <CheckRow label="Receipt given to medical center" checked={f.receipt_given} onChange={v=>set("receipt_given")(v)}/>
+    <CheckRow label="MOFA update paper received" checked={f.update_paper_received} onChange={v=>set("update_paper_received")(v)} urgent={f.receipt_given&&!f.update_paper_received}/>
+    {/* Bug 8: removed info warning div */}
+    <SaveNextBtns saved={saved} onSave={doSave} onNext={()=>{const patch={mofa:{...data.mofa,[cid]:{...f}}};if(f.update_paper_received){patch.documents={...data.documents,[cid]:{...(data.documents?.[cid]||{}),mofa_update_paper:true}};}onAdvance(patch);}} nextLabel="Finger" canNext={candStage==="mofa"}/>
+  </SC>);
+}
+
+// ── Finger Section — Bug 3: auto-sync docs, Bug 8: no urgent div ──
+function FingerSection({cid,data,upd,onAdvance,candStage}){
+  const orig=data.finger?.[cid]||{finger_date:"",passport_given_to:"passenger",finger_done:false,slip_received:false};
+  const [f,setF]=useState({...orig}); const [saved,setSaved]=useState(false);
+  useEffect(()=>setF({...data.finger?.[cid]||{finger_date:"",passport_given_to:"passenger",finger_done:false,slip_received:false}}),[cid]);
+  const set=k=>v=>setF(p=>({...p,[k]:v}));
+  const doSave=()=>{
+    const patch={finger:{...data.finger,[cid]:{...f}}};
+    // Bug 3: auto-sync finger_slip to documents when slip_received is true
+    if(f.slip_received){
+      patch.documents={...data.documents,[cid]:{...(data.documents?.[cid]||{}),finger_slip:true}};
+    }
+    upd(patch);
+    setSaved(true);setTimeout(()=>setSaved(false),2000);
+  };
+  return(<SC title="👆 Finger Appointment">
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><FInput label="Finger Date" type="date" value={f.finger_date||""} onChange={e=>set("finger_date")(e.target.value)}/><FSelect label="Passport Given To" value={f.passport_given_to} onChange={e=>set("passport_given_to")(e.target.value)}><option value="passenger">Passenger</option><option value="agent">Agent</option></FSelect></div>
+    <CheckRow label="Finger done by passenger" checked={f.finger_done} onChange={v=>set("finger_done")(v)}/>
+    <CheckRow label="Finger slip received by office" checked={f.slip_received} onChange={v=>set("slip_received")(v)} urgent={f.finger_done&&!f.slip_received}/>
+    {/* Bug 8: removed URGENT red div */}
+    {f.finger_done&&f.slip_received&&<div style={{marginTop:8}}><Badge label="✅ Finger complete — Slip received" color={co.green} bg={co.green3}/></div>}
+    <SaveNextBtns saved={saved} onSave={doSave} onNext={()=>onAdvance({finger:{...data.finger,[cid]:{...f}}})} nextLabel="Documents" canNext={candStage==="finger"}/>
+  </SC>);
+}
+
+// ── Documents Section — Bug 5: untick warning, Bug 13: dynamic bar
+function DocsSection({cid,data,upd,onAdvance,candStage}){
+  const orig=data.documents?.[cid]||{police_clearance:false,photo_with_passport:false,mofa_update_paper:false,finger_slip:false};
+  const [f,setF]=useState({...orig}); const [saved,setSaved]=useState(false);
+  const [warnField,setWarnField]=useState(null); // Bug 5
+  useEffect(()=>setF({...data.documents?.[cid]||{police_clearance:false,photo_with_passport:false,mofa_update_paper:false,finger_slip:false}}),[cid]);
+  const set=k=>v=>setF(p=>({...p,[k]:v}));
+  const doSave=()=>{upd({documents:{...data.documents,[cid]:{...f}}});setSaved(true);setTimeout(()=>setSaved(false),2000);};
+
+  // Bug 5: untick warning handler
+  const handleCheck=(field,newVal)=>{
+    if(!newVal&&f[field]){
+      setWarnField(field);
+      setTimeout(()=>setWarnField(wf=>wf===field?null:wf),2500);
+    }
+    set(field)(newVal);
+  };
+  const WarnMsg=({field})=>warnField===field?(
+    <div style={{fontSize:11,color:"#b91c1c",padding:"2px 0 6px 22px",fontStyle:"italic"}}>Previously marked as received</div>
+  ):null;
+
+  // Bug 13: dynamic progress bar
+  const docItems=[f.police_clearance,f.photo_with_passport,f.mofa_update_paper,f.finger_slip];
+  const cnt=docItems.filter(Boolean).length;
+  const total=docItems.length;
+  const all=cnt===total;
+
+  return(<SC title="📁 Documents Checklist">
+    <div style={{marginBottom:10,padding:"5px 8px",background:co.bg,borderRadius:5,fontSize:11}}>
+      Progress: <b>{cnt}/{total}</b>
+      <div style={{height:4,background:co.border,borderRadius:3,overflow:"hidden",marginTop:4}}>
+        <div style={{height:"100%",width:`${cnt/total*100}%`,background:all?co.green:co.gold,borderRadius:3,transition:"width .3s"}}/>
+      </div>
+    </div>
+    <CheckRow label="Finger Slip" checked={f.finger_slip} onChange={v=>handleCheck("finger_slip",v)} urgent={!f.finger_slip}/>
+    <WarnMsg field="finger_slip"/>
+    <CheckRow label="Police Clearance" checked={f.police_clearance} onChange={v=>handleCheck("police_clearance",v)}/>
+    <WarnMsg field="police_clearance"/>
+    <CheckRow label="Photo with Passport" checked={f.photo_with_passport} onChange={v=>handleCheck("photo_with_passport",v)}/>
+    <WarnMsg field="photo_with_passport"/>
+    <CheckRow label="MOFA Update Paper" checked={f.mofa_update_paper} onChange={v=>handleCheck("mofa_update_paper",v)}/>
+    <WarnMsg field="mofa_update_paper"/>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10}}>
+      {all?<Badge label="✅ All Ready — Submit to Embassy" color={co.green} bg={co.green3}/>:<Badge label={`⏳ ${total-cnt} document(s) missing`} color={co.orange} bg={co.orange3}/>}
+    </div>
+    <SaveNextBtns saved={saved} onSave={doSave} onNext={()=>onAdvance({documents:{...data.documents,[cid]:{...f}}})} nextLabel="Visa" canNext={candStage==="documents"}/>
+  </SC>);
+}
+
+// ── Visa Section ──────────────────────────────────────────────────
+function VisaSection({cid,data,upd,onAdvance,candStage}){
+  const orig=data.visa?.[cid]||{submitted:false,visa_received:false,visa_date:""};
+  const [f,setF]=useState({...orig}); const [saved,setSaved]=useState(false);
+  useEffect(()=>setF({...data.visa?.[cid]||{submitted:false,visa_received:false,visa_date:""}}),[cid]);
+  const set=k=>v=>setF(p=>({...p,[k]:v}));
+  const doSave=()=>{upd({visa:{...data.visa,[cid]:{...f}}});setSaved(true);setTimeout(()=>setSaved(false),2000);};
+  const vd=visaLeft(f.visa_date);
+  return(<SC title="🛂 Visa Submission">
+    <CheckRow label="Submitted to Embassy" checked={f.submitted} onChange={v=>set("submitted")(v)}/>
+    <CheckRow label="Visa Received" checked={f.visa_received} onChange={v=>set("visa_received")(v)}/>
+    <FInput label="Visa Date" type="date" value={f.visa_date||""} onChange={e=>set("visa_date")(e.target.value)} mb={8}/>
+    {f.visa_received&&vd!==null&&vd<0&&<div style={{marginBottom:8,fontSize:11,color:co.red,fontWeight:700,padding:"5px 8px",background:co.red3,borderRadius:5}}>⛔ Visa EXPIRED!</div>}
+    {f.visa_received&&vd!==null&&vd<=30&&vd>=0&&<div style={{marginBottom:8,fontSize:11,color:co.orange,fontWeight:700,padding:"5px 8px",background:co.orange3,borderRadius:5}}>⚠️ Visa expires in {vd} days!</div>}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
+      {f.visa_received?<Badge label={`✅ Visa received${f.visa_date?" — "+f.visa_date:""}`} color={co.green} bg={co.green3}/>:f.submitted?<Badge label="⏳ Awaiting visa" color={co.orange} bg={co.orange3}/>:<Badge label="⏳ Not submitted" color={co.t3} bg={co.bg}/>}
+    </div>
+    <SaveNextBtns saved={saved} onSave={doSave} onNext={()=>onAdvance({visa:{...data.visa,[cid]:{...f}}})} nextLabel="BMET" canNext={candStage==="visa"}/>
+  </SC>);
+}
+
+// ── BMET Section — Bug 8: removed info warning ────────────────────
+function BmetSection({cid,data,upd,onAdvance,candStage}){
+  const orig=data.bmet?.[cid]||{training_done:false,finger_done:false,notified_agent:false};
+  const [f,setF]=useState({...orig}); const [saved,setSaved]=useState(false);
+  useEffect(()=>setF({...data.bmet?.[cid]||{training_done:false,finger_done:false,notified_agent:false}}),[cid]);
+  const set=k=>v=>setF(p=>({...p,[k]:v}));
+  const doSave=()=>{upd({bmet:{...data.bmet,[cid]:{...f}}});setSaved(true);setTimeout(()=>setSaved(false),2000);};
+  return(<SC title="🎓 BMET">
+    <CheckRow label="BMET Training done" checked={f.training_done} onChange={v=>set("training_done")(v)}/>
+    <CheckRow label="BMET Finger done" checked={f.finger_done} onChange={v=>set("finger_done")(v)}/>
+    <CheckRow label="Agent notified" checked={f.notified_agent} onChange={v=>set("notified_agent")(v)}/>
+    {/* Bug 8: removed BMET info warning */}
+    {f.training_done&&f.finger_done&&<div style={{marginTop:8}}><Badge label="✅ BMET Complete" color={co.green} bg={co.green3}/></div>}
+    <SaveNextBtns saved={saved} onSave={doSave} onNext={()=>onAdvance({bmet:{...data.bmet,[cid]:{...f}}})} nextLabel="Manpower" canNext={candStage==="bmet"}/>
+  </SC>);
+}
+
+// ── Manpower Section ──────────────────────────────────────────────
+function ManSection({cid,data,upd,onAdvance,candStage}){
+  const orig=data.manpower?.[cid]||{submitted:false,complete:false,passport_returned:false};
+  const [f,setF]=useState({...orig}); const [saved,setSaved]=useState(false);
+  useEffect(()=>setF({...data.manpower?.[cid]||{submitted:false,complete:false,passport_returned:false}}),[cid]);
+  const set=k=>v=>setF(p=>({...p,[k]:v}));
+  const doSave=()=>{upd({manpower:{...data.manpower,[cid]:{...f}}});setSaved(true);setTimeout(()=>setSaved(false),2000);};
+  return(<SC title="⚙️ Manpower Submission">
+    <CheckRow label="Submitted to agency for manpower" checked={f.submitted} onChange={v=>set("submitted")(v)}/>
+    <CheckRow label="Manpower complete" checked={f.complete} onChange={v=>set("complete")(v)}/>
+    <CheckRow label="Passport returned to office" checked={f.passport_returned} onChange={v=>set("passport_returned")(v)}/>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10}}>
+      {f.complete&&f.passport_returned?<Badge label="✅ Done — Passport in hand" color={co.green} bg={co.green3}/>:<div/>}
+    </div>
+    {!f.complete&&candStage==="manpower"&&<div style={{fontSize:11,color:co.orange,marginBottom:6}}>⚠️ Manpower must be complete to proceed</div>}
+    <SaveNextBtns saved={saved} onSave={doSave} onNext={()=>onAdvance({manpower:{...data.manpower,[cid]:{...f}}})} nextLabel="Flight" canNext={candStage==="manpower"&&!!f.complete}/>
+  </SC>);
+}
+
+// ── Flight Section ────────────────────────────────────────────────
+function FlightSection({cid,data,upd,onAdvance,candStage}){
+  const orig=data.flight?.[cid]||{ticket_done:false,flight_date:"",airline:""};
+  const [f,setF]=useState({...orig}); const [saved,setSaved]=useState(false);
+  useEffect(()=>setF({...data.flight?.[cid]||{ticket_done:false,flight_date:"",airline:""}}),[cid]);
+  const set=k=>v=>setF(p=>({...p,[k]:v}));
+  const doSave=()=>{upd({flight:{...data.flight,[cid]:{...f}}});setSaved(true);setTimeout(()=>setSaved(false),2000);};
+  const thisWeek=flightThisWeek(f.flight_date);
+  return(<SC title="✈️ Flight & Ticket">
+    <CheckRow label="Ticket booked" checked={f.ticket_done} onChange={v=>set("ticket_done")(v)}/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:9}}><FInput label="Flight Date" type="date" value={f.flight_date||""} onChange={e=>set("flight_date")(e.target.value)} mb={0}/><FInput label="Airline" value={f.airline||""} onChange={e=>set("airline")(e.target.value)} placeholder="Biman Bangladesh…" mb={0}/></div>
+    {thisWeek&&<div style={{marginTop:8,fontSize:11,color:co.blue,fontWeight:700,padding:"5px 8px",background:co.blue3,borderRadius:5}}>🛫 Departing this week!</div>}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10}}>
+      {f.ticket_done&&f.flight_date?<Badge label={`✅ ${f.flight_date}${f.airline?" — "+f.airline:""}`} color={co.green} bg={co.green3}/>:<div/>}
+    </div>
+    <SaveNextBtns saved={saved} onSave={doSave} onNext={()=>onAdvance({flight:{...data.flight,[cid]:{...f}}})} nextLabel="Iqama" canNext={candStage==="flight"}/>
+  </SC>);
+}
+
+// ── Iqama Section ─────────────────────────────────────────────────
+function IqamaSection({cid,data,upd,candStage}){
+  const orig=data.iqama?.[cid]||{status:"pending",iqama_no:"",date:""};
+  const [f,setF]=useState({...orig}); const [saved,setSaved]=useState(false);
+  useEffect(()=>setF({...data.iqama?.[cid]||{status:"pending",iqama_no:"",date:""}}),[cid]);
+  const set=k=>v=>setF(p=>({...p,[k]:v}));
+  const doSave=()=>{upd({iqama:{...data.iqama,[cid]:{...f}}});setSaved(true);setTimeout(()=>setSaved(false),2000);};
+  return(<div style={{...CARD,borderTop:`3px solid ${co.gold}`}}>
+    <SecTitle c="🪪 Iqama — Post-Arrival Residency Permit"/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}><FSelect label="Status" value={f.status} onChange={e=>set("status")(e.target.value)}><option value="pending">⏳ Pending</option><option value="processing">🔄 Processing</option><option value="received">✅ Received</option></FSelect><FInput label="Iqama Number" value={f.iqama_no||""} onChange={e=>set("iqama_no")(e.target.value)} placeholder="IQ-2024-00000"/><FInput label="Issue Date" type="date" value={f.date||""} onChange={e=>set("date")(e.target.value)}/></div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
+      {f.status==="received"&&f.iqama_no?<Badge label={`✅ ${f.iqama_no}${f.date?" — "+f.date:""}`} color={co.green} bg={co.green3}/>:f.status==="processing"?<Badge label="🔄 Processing" color={co.blue} bg={co.blue3}/>:<Badge label="⏳ Pending" color={co.t3} bg={co.bg}/>}
+    </div>
+    <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}><SaveBtn saved={saved} onClick={doSave}/></div>
+  </div>);
+}
+
+// ── Agents — Bug 12: inline error instead of alert ────────────────
+function AgentsList({data,go,upd}){
+  const [showAdd,setShowAdd]=useState(false);
+  const [f,setF]=useState({name:"",phone:"",area:""});
+  const [addErr,setAddErr]=useState(""); // Bug 12
+  const set=k=>e=>setF(p=>({...p,[k]:e.target.value}));
+  const add=()=>{
+    if(!f.name.trim())return setAddErr("Name required.");
+    setAddErr("");
+    upd({agents:[...data.agents,{...f,id:uid("a")}]});
+    setF({name:"",phone:"",area:""});
+    setShowAdd(false);
+  };
+  return(<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+      <h2 style={{fontFamily:"'Playfair Display',serif",color:co.navy,fontSize:22,fontWeight:700}}>Agents</h2>
+      <Btn v="gold" onClick={()=>setShowAdd(true)}>+ Add Agent</Btn>
+    </div>
+    {data.agents.length===0&&<div style={{textAlign:"center",padding:60,color:co.t3}}><div style={{fontSize:36,marginBottom:10}}>🤝</div>No agents yet. Add one to get started.</div>}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:13}}>
+      {data.agents.map(a=>{const ac=data.candidates.filter(c=>!c.archived&&c.agent_id===a.id);const active=ac.filter(c=>c.current_stage!=="iqama").length;const done=ac.filter(c=>c.current_stage==="iqama").length;return(
+        <div key={a.id} onClick={()=>go("agent_profile",a.id)} style={{...CARD,borderLeft:`4px solid ${co.gold}`,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 16px rgba(13,27,42,.15)"} onMouseLeave={e=>e.currentTarget.style.boxShadow="0 2px 8px rgba(13,27,42,.09)"}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:9}}>
+            <div><div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:co.navy,fontSize:17,marginBottom:3}}>{a.name}</div><div style={{fontSize:12,color:co.t3,marginBottom:2}}>📍 {a.area||"—"}</div><div style={{fontSize:12,color:co.t3,display:"flex",alignItems:"center"}}>📞 {a.phone||"—"}<WaBtn phone={a.phone}/></div></div>
+            <div style={{textAlign:"center",background:co.navy,color:co.gold,borderRadius:9,padding:"7px 12px",minWidth:56}}><div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,lineHeight:1}}>{ac.length}</div><div style={{fontSize:8,letterSpacing:.8,textTransform:"uppercase",color:co.gold2,marginTop:2}}>Total</div></div>
+          </div>
+          <div style={{display:"flex",gap:6,marginBottom:8}}><Badge label={`${active} Active`} color={co.blue} bg={co.blue3}/><Badge label={`${done} Done`} color={co.green} bg={co.green3}/></div>
+          <div style={{fontSize:11,color:co.gold,fontWeight:600}}>View Profile →</div>
+        </div>
+      );})}
+    </div>
+    <Modal open={showAdd} onClose={()=>{setAddErr("");setShowAdd(false);}} title="Add New Agent" width={420}>
+      <ErrBox msg={addErr}/>
+      <FInput label="Name *" value={f.name} onChange={set("name")} placeholder="Full name"/>
+      <FInput label="Phone"  value={f.phone} onChange={set("phone")} placeholder="01711-000000"/>
+      <FInput label="Area"   value={f.area}  onChange={set("area")}  placeholder="Comilla, Sylhet…"/>
+      <div style={{display:"flex",gap:9,justifyContent:"flex-end",marginTop:4}}><Btn v="ghost" onClick={()=>{setAddErr("");setShowAdd(false);}}>Cancel</Btn><Btn v="gold" onClick={add}>Add Agent</Btn></div>
+    </Modal>
+  </div>);
+}
+
+function AgentProfile({data,id,go,upd}){
+  const agent=data.agents.find(a=>a.id===id);
+  const [showEdit,setShowEdit]=useState(false); const [showDel,setShowDel]=useState(false);
+  const [f,setF]=useState({}); const set=k=>e=>setF(p=>({...p,[k]:e.target.value}));
+  const [delErr,setDelErr]=useState(""); // Bug 12
+  useEffect(()=>{if(agent)setF({...agent});},[agent]);
+  if(!agent)return(<div style={{textAlign:"center",padding:60,color:co.t3}}>Not found.<br/><br/><Btn v="ghost" onClick={()=>go("agents")}>← Back</Btn></div>);
+  const cands=data.candidates.filter(c=>c.agent_id===id&&!c.archived);
+  const archived=data.candidates.filter(c=>c.agent_id===id&&c.archived);
+  const saveAgent=()=>{upd({agents:data.agents.map(a=>a.id===id?{...a,...f}:a)});setShowEdit(false);};
+  const delAgent=()=>{
+    if(data.candidates.filter(c=>c.agent_id===id&&!c.archived).length>0){
+      setDelErr("Cannot delete — archive all active candidates first.");
+      return;
+    }
+    upd({agents:data.agents.filter(a=>a.id!==id)});go("agents");
+  };
+  return(<div>
+    <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:16,flexWrap:"wrap"}}>
+      <Btn v="ghost" sz="sm" onClick={()=>go("agents")}>← Back</Btn>
+      <div style={{flex:1}}><h2 style={{fontFamily:"'Playfair Display',serif",color:co.navy,fontSize:22,fontWeight:700}}>{agent.name}</h2><div style={{fontSize:12,color:co.t3,marginTop:2}}>📍 {agent.area||"—"} · 📞 {agent.phone||"—"}<WaBtn phone={agent.phone}/></div></div>
+      <Btn v="ghost" sz="sm" onClick={()=>setShowEdit(true)}>✏️ Edit</Btn>
+      <Btn v="red" sz="sm" onClick={()=>{setDelErr("");setShowDel(true);}}>🗑️ Delete</Btn>
+    </div>
+    {delErr&&<div style={{background:co.red3,color:co.red,border:`1px solid #f5c6cb`,padding:"8px 12px",borderRadius:7,marginBottom:12,fontSize:13,fontWeight:600}}>⚠️ {delErr}</div>}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:11,marginBottom:16}}>
+      {[["Total",cands.length,co.navy2],["Active",cands.filter(c=>c.current_stage!=="iqama").length,co.blue],["Completed",cands.filter(c=>c.current_stage==="iqama").length,co.green],["Archived",archived.length,co.t3]].map(([lbl,val,clr])=>(
+        <div key={lbl} style={{...CARD,textAlign:"center",borderTop:`3px solid ${clr}`}}><div style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:700,color:clr}}>{val}</div><div style={{fontSize:10,color:co.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:.7,marginTop:3}}>{lbl}</div></div>
+      ))}
+    </div>
+    <div style={CARD}>
+      <SecTitle c="👤 Candidates"/>
+      {cands.length===0?<div style={{color:co.t3,fontSize:13,padding:"16px 0",textAlign:"center"}}>No active candidates for this agent.</div>:(
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr style={{background:co.navy}}>{["Name","Passport","Country","Stage","Days","Added",""].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"left",color:co.gold,fontSize:9,fontWeight:700,textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
+          <tbody>{cands.map((c,i)=>{const days=procDays(c);return(
+            <tr key={c.id} style={{background:i%2===0?"#fafaf8":co.white,borderBottom:`1px solid ${co.border}`,cursor:"pointer"}} onClick={()=>go("detail",c.id,"agent_profile")}>
+              <td style={{padding:"8px 10px",fontWeight:700,color:co.navy}}>{c.name}</td>
+              <td style={{padding:"8px 10px",fontFamily:"monospace",fontSize:11,color:co.navy3}}>{c.passport_no}</td>
+              <td style={{padding:"8px 10px",fontSize:11}}>{c.country}</td>
+              <td style={{padding:"8px 10px"}}><StageBadge stage={c.current_stage}/></td>
+              <td style={{padding:"8px 10px"}}>{days!==null&&<span style={{background:days>90?co.red3:days>30?co.orange3:co.green3,color:days>90?co.red:days>30?co.orange:co.green,padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:700}}>{days}d</span>}</td>
+              <td style={{padding:"8px 10px",color:co.t3,fontSize:11}}>{c.created_at}</td>
+              <td style={{padding:"8px 10px"}}><Btn sz="sm" v="navy" onClick={e=>{e.stopPropagation();go("detail",c.id,"agent_profile");}}>View →</Btn></td>
+            </tr>
+          );})}</tbody>
+        </table>
+      )}
+    </div>
+    <Modal open={showEdit} onClose={()=>setShowEdit(false)} title="Edit Agent" width={420}>
+      <FInput label="Name"  value={f.name||""}  onChange={set("name")}/><FInput label="Phone" value={f.phone||""} onChange={set("phone")}/><FInput label="Area"  value={f.area||""}  onChange={set("area")}/>
+      <div style={{display:"flex",gap:9,justifyContent:"flex-end",marginTop:4}}><Btn v="ghost" onClick={()=>setShowEdit(false)}>Cancel</Btn><Btn v="gold" onClick={saveAgent}>Save Changes</Btn></div>
+    </Modal>
+    <ConfirmModal open={showDel} onClose={()=>setShowDel(false)} onConfirm={delAgent} title="Delete Agent" msg={`Delete ${agent.name}? Active candidates must be archived first.`} confirmLabel="Delete" v="red"/>
+  </div>);
+}
+
+// ── Agencies — Bug 12: inline error ──────────────────────────────
+function AgencyList({data,go,upd}){
+  const [showAdd,setShowAdd]=useState(false);
+  const [f,setF]=useState({name:"",phone:"",contact_person:""});
+  const [addErr,setAddErr]=useState(""); // Bug 12
+  const set=k=>e=>setF(p=>({...p,[k]:e.target.value}));
+  const add=()=>{
+    if(!f.name.trim())return setAddErr("Name required.");
+    setAddErr("");
+    upd({agencies:[...data.agencies,{...f,id:uid("ag")}]});
+    setF({name:"",phone:"",contact_person:""});
+    setShowAdd(false);
+  };
+  return(<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+      <h2 style={{fontFamily:"'Playfair Display',serif",color:co.navy,fontSize:22,fontWeight:700}}>Processing Agencies</h2>
+      <Btn v="gold" onClick={()=>setShowAdd(true)}>+ Add Agency</Btn>
+    </div>
+    {data.agencies.length===0&&<div style={{textAlign:"center",padding:60,color:co.t3}}><div style={{fontSize:36,marginBottom:10}}>🏢</div>No agencies yet.</div>}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:13}}>
+      {data.agencies.map(a=>{const ac=data.candidates.filter(c=>!c.archived&&c.agency_id===a.id);const bS={};STAGES.forEach(s=>bS[s.id]=0);ac.forEach(c=>{if(bS[c.current_stage]!==undefined)bS[c.current_stage]++;});return(
+        <div key={a.id} onClick={()=>go("agency_profile",a.id)} style={{...CARD,borderLeft:`4px solid ${co.navy2}`,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 16px rgba(13,27,42,.15)"} onMouseLeave={e=>e.currentTarget.style.boxShadow="0 2px 8px rgba(13,27,42,.09)"}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:9}}>
+            <div><div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:co.navy,fontSize:17,marginBottom:3}}>{a.name}</div><div style={{fontSize:12,color:co.t3,marginBottom:2}}>📞 {a.phone||"—"}</div><div style={{fontSize:12,color:co.t3}}>👤 {a.contact_person||"—"}</div></div>
+            <div style={{textAlign:"center",background:co.navy2,color:co.gold,borderRadius:9,padding:"7px 12px",minWidth:56}}><div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,lineHeight:1}}>{ac.length}</div><div style={{fontSize:8,letterSpacing:.8,textTransform:"uppercase",color:co.gold2,marginTop:2}}>Candidates</div></div>
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>{STAGES.filter(s=>bS[s.id]>0).slice(0,4).map(s=><Badge key={s.id} label={`${s.icon} ${bS[s.id]}`} color={co.blue} bg={co.blue3}/>)}</div>
+          <div style={{fontSize:11,color:co.gold,fontWeight:600}}>View Profile →</div>
+        </div>
+      );})}
+    </div>
+    <Modal open={showAdd} onClose={()=>{setAddErr("");setShowAdd(false);}} title="Add New Agency" width={420}>
+      <ErrBox msg={addErr}/>
+      <FInput label="Name *"         value={f.name}           onChange={set("name")}           placeholder="Agency name"/>
+      <FInput label="Phone"          value={f.phone}          onChange={set("phone")}          placeholder="02-0000000"/>
+      <FInput label="Contact Person" value={f.contact_person} onChange={set("contact_person")} placeholder="Mr./Ms. Name"/>
+      <div style={{display:"flex",gap:9,justifyContent:"flex-end",marginTop:4}}><Btn v="ghost" onClick={()=>{setAddErr("");setShowAdd(false);}}>Cancel</Btn><Btn v="gold" onClick={add}>Add Agency</Btn></div>
+    </Modal>
+  </div>);
+}
+
+function AgencyProfile({data,id,go,upd}){
+  const agency=data.agencies.find(a=>a.id===id);
+  const [showEdit,setShowEdit]=useState(false); const [showDel,setShowDel]=useState(false);
+  const [f,setF]=useState({}); const set=k=>e=>setF(p=>({...p,[k]:e.target.value}));
+  const [delErr,setDelErr]=useState(""); // Bug 12
+  useEffect(()=>{if(agency)setF({...agency});},[agency]);
+  if(!agency)return(<div style={{textAlign:"center",padding:60,color:co.t3}}>Not found.<br/><br/><Btn v="ghost" onClick={()=>go("agencies")}>← Back</Btn></div>);
+  const cands=data.candidates.filter(c=>c.agency_id===id&&!c.archived);
+  const sS={};STAGES.forEach(s=>sS[s.id]=0);cands.forEach(c=>{if(sS[c.current_stage]!==undefined)sS[c.current_stage]++;});
+  const saveAgency=()=>{upd({agencies:data.agencies.map(a=>a.id===id?{...a,...f}:a)});setShowEdit(false);};
+  const delAgency=()=>{
+    if(data.candidates.filter(c=>c.agency_id===id&&!c.archived).length>0){
+      setDelErr("Cannot delete — has active candidates.");
+      return;
+    }
+    upd({agencies:data.agencies.filter(a=>a.id!==id)});go("agencies");
+  };
+  return(<div>
+    <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:16,flexWrap:"wrap"}}>
+      <Btn v="ghost" sz="sm" onClick={()=>go("agencies")}>← Back</Btn>
+      <div style={{flex:1}}><h2 style={{fontFamily:"'Playfair Display',serif",color:co.navy,fontSize:22,fontWeight:700}}>{agency.name}</h2><div style={{fontSize:12,color:co.t3,marginTop:2}}>📞 {agency.phone||"—"} · 👤 {agency.contact_person||"—"}</div></div>
+      <Btn v="ghost" sz="sm" onClick={()=>setShowEdit(true)}>✏️ Edit</Btn>
+      <Btn v="red" sz="sm" onClick={()=>{setDelErr("");setShowDel(true);}}>🗑️ Delete</Btn>
+    </div>
+    {delErr&&<div style={{background:co.red3,color:co.red,border:`1px solid #f5c6cb`,padding:"8px 12px",borderRadius:7,marginBottom:12,fontSize:13,fontWeight:600}}>⚠️ {delErr}</div>}
+    <div style={{...CARD,marginBottom:14}}>
+      <SecTitle c="📊 Stage Breakdown"/>
+      <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+        {STAGES.filter(s=>sS[s.id]>0).map(st=>(
+          <div key={st.id} style={{background:co.navy,color:"#fff",borderRadius:8,padding:"8px 12px",textAlign:"center",minWidth:72}}><div style={{fontSize:16}}>{st.icon}</div><div style={{fontSize:9,fontWeight:600,marginTop:2}}>{st.label}</div><div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:co.gold,lineHeight:1.1,marginTop:1}}>{sS[st.id]}</div></div>
+        ))}
+        {cands.length===0&&<div style={{color:co.t3,fontSize:12}}>No active candidates.</div>}
+      </div>
+    </div>
+    <div style={CARD}>
+      <SecTitle c="👤 Assigned Candidates"/>
+      {cands.length===0?<div style={{color:co.t3,fontSize:13,padding:"16px 0",textAlign:"center"}}>No candidates assigned to this agency.</div>:(
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr style={{background:co.navy}}>{["Name","Agent","Country","Stage","Days",""].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"left",color:co.gold,fontSize:9,fontWeight:700,textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
+          <tbody>{cands.map((c,i)=>{const ag=data.agents.find(a=>a.id===c.agent_id);const days=procDays(c);return(
+            <tr key={c.id} style={{background:i%2===0?"#fafaf8":co.white,borderBottom:`1px solid ${co.border}`,cursor:"pointer"}} onClick={()=>go("detail",c.id,"agency_profile")}>
+              <td style={{padding:"8px 10px",fontWeight:700,color:co.navy}}>{c.name}</td>
+              <td style={{padding:"8px 10px",fontSize:11,color:co.t2}}>{ag?.name||"—"}</td>
+              <td style={{padding:"8px 10px",fontSize:11}}>{c.country}</td>
+              <td style={{padding:"8px 10px"}}><StageBadge stage={c.current_stage}/></td>
+              <td style={{padding:"8px 10px"}}>{days!==null&&<span style={{background:days>90?co.red3:days>30?co.orange3:co.green3,color:days>90?co.red:days>30?co.orange:co.green,padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:700}}>{days}d</span>}</td>
+              <td style={{padding:"8px 10px"}}><Btn sz="sm" v="navy" onClick={e=>{e.stopPropagation();go("detail",c.id,"agency_profile");}}>View →</Btn></td>
+            </tr>
+          );})}</tbody>
+        </table>
+      )}
+    </div>
+    <Modal open={showEdit} onClose={()=>setShowEdit(false)} title="Edit Agency" width={420}>
+      <FInput label="Name *"         value={f.name||""}           onChange={set("name")}/>
+      <FInput label="Phone"          value={f.phone||""}          onChange={set("phone")}/>
+      <FInput label="Contact Person" value={f.contact_person||""} onChange={set("contact_person")}/>
+      <div style={{display:"flex",gap:9,justifyContent:"flex-end",marginTop:4}}><Btn v="ghost" onClick={()=>setShowEdit(false)}>Cancel</Btn><Btn v="gold" onClick={saveAgency}>Save Changes</Btn></div>
+    </Modal>
+    <ConfirmModal open={showDel} onClose={()=>setShowDel(false)} onConfirm={delAgency} title="Delete Agency" msg={`Delete ${agency.name}?`} confirmLabel="Delete" v="red"/>
+  </div>);
+}
+
+// ── Reports ───────────────────────────────────────────────────────
+function Reports({data}){
+  const [month,setMonth]=useState("");
+  const cands=data.candidates.filter(c=>!c.archived);
+  const countryReport=useMemo(()=>{const m={};cands.forEach(c=>{if(!m[c.country])m[c.country]={total:0,active:0,done:0,flight:0};m[c.country].total++;if(c.current_stage==="iqama")m[c.country].done++;else if(c.current_stage==="flight")m[c.country].flight++;else m[c.country].active++;});return Object.entries(m).sort((a,b)=>b[1].total-a[1].total);},[cands]);
+  const allMonths=useMemo(()=>{const s=new Set(data.candidates.map(c=>c.created_at.slice(0,7)));return[...s].sort((a,b)=>b.localeCompare(a));},[data.candidates]);
+  const mCands=useMemo(()=>month?data.candidates.filter(c=>c.created_at.startsWith(month)):[],[data.candidates,month]);
+  const sMap=useMemo(()=>{const m={};STAGES.forEach(s=>m[s.id]=0);mCands.forEach(c=>{if(m[c.current_stage]!==undefined)m[c.current_stage]++;});return m;},[mCands]);
+  return(<div>
+    <h2 style={{fontFamily:"'Playfair Display',serif",color:co.navy,fontSize:22,fontWeight:700,marginBottom:18}}>Reports</h2>
+
+    {/* ── Ready for Visa ── */}
+    {(()=>{
+      const list=data.candidates.filter(c=>!c.archived&&c.current_stage==="visa"&&!(data.visa?.[c.id]?.visa_received));
+      const printIt=()=>{
+        const w=window.open("","_blank");
+        w.document.write(`<html><head><title>Ready for Visa</title><style>body{font-family:Arial,sans-serif;padding:20px}h2{color:#0d1b2a;border-bottom:2px solid #c9a84c;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin-top:12px}th{background:#0d1b2a;color:#c9a84c;padding:8px 10px;text-align:left;font-size:12px}td{padding:8px 10px;border-bottom:1px solid #eee;font-size:12px}tr:nth-child(even)td{background:#f9f9f9}</style></head><body><h2>✅ Ready for Visa</h2><p style="color:#666;font-size:11px">Printed: ${new Date().toLocaleString()}</p><table><thead><tr><th>#</th><th>Code</th><th>Name</th><th>Passport No</th><th>Agent</th><th>Country</th></tr></thead><tbody>${list.map((c,i)=>{const ag=data.agents.find(a=>a.id===c.agent_id);return`<tr><td>${i+1}</td><td>${c.ro_code||"—"}</td><td>${c.name}</td><td>${c.passport_no||"—"}</td><td>${ag?.name||"—"}</td><td>${c.country||"—"}</td></tr>`;}).join("")}</tbody></table></body></html>`);
+        w.document.close();w.print();
+      };
+      return(
+        <div style={{...CARD,marginBottom:16}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <SecTitle c="✅ Ready for Visa"/>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{background:co.green3,color:co.green,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>{list.length}</span>
+              <Btn sz="sm" v="ghost" onClick={printIt}>🖨️ Print</Btn>
+            </div>
+          </div>
+          {list.length===0?<div style={{color:co.t3,fontSize:12}}>No candidates ready for visa.</div>:(
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead><tr style={{background:co.navy}}>{["#","Code","Name","Passport No","Agent","Country"].map(h=><th key={h} style={{padding:"7px 10px",color:co.gold,fontSize:9,fontWeight:700,textTransform:"uppercase",textAlign:"left"}}>{h}</th>)}</tr></thead>
+              <tbody>{list.map((c,i)=>{const ag=data.agents.find(a=>a.id===c.agent_id);return(
+                <tr key={c.id} style={{borderBottom:`1px solid ${co.border}`,background:i%2===0?"#fafaf8":co.white}}>
+                  <td style={{padding:"7px 10px",color:co.t3}}>{i+1}</td>
+                  <td style={{padding:"7px 10px"}}><span style={{background:co.navy,color:co.gold,borderRadius:5,padding:"2px 6px",fontSize:10,fontWeight:700,fontFamily:"monospace"}}>{c.ro_code||"—"}</span></td>
+                  <td style={{padding:"7px 10px",fontWeight:600}}>{c.name}</td>
+                  <td style={{padding:"7px 10px",fontFamily:"monospace",fontSize:11,color:co.t3}}>{c.passport_no||"—"}</td>
+                  <td style={{padding:"7px 10px"}}>{ag?.name||"—"}</td>
+                  <td style={{padding:"7px 10px",color:co.t3}}>{c.country||"—"}</td>
+                </tr>
+              );})}</tbody>
+            </table>
+          )}
+        </div>
+      );
+    })()}
+
+    {/* ── Pending Manpower ── */}
+    {(()=>{
+      const list=data.candidates.filter(c=>!c.archived&&(c.current_stage==="bmet"||(c.current_stage==="manpower"&&!(data.manpower?.[c.id]?.complete))));
+      const printIt=()=>{
+        const w=window.open("","_blank");
+        w.document.write(`<html><head><title>Pending Manpower</title><style>body{font-family:Arial,sans-serif;padding:20px}h2{color:#0d1b2a;border-bottom:2px solid #c9a84c;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin-top:12px}th{background:#0d1b2a;color:#c9a84c;padding:8px 10px;text-align:left;font-size:12px}td{padding:8px 10px;border-bottom:1px solid #eee;font-size:12px}tr:nth-child(even)td{background:#f9f9f9}</style></head><body><h2>⚙️ Pending Manpower</h2><p style="color:#666;font-size:11px">Printed: ${new Date().toLocaleString()}</p><table><thead><tr><th>#</th><th>Code</th><th>Name</th><th>Passport No</th><th>Agent</th><th>Country</th></tr></thead><tbody>${list.map((c,i)=>{const ag=data.agents.find(a=>a.id===c.agent_id);return`<tr><td>${i+1}</td><td>${c.ro_code||"—"}</td><td>${c.name}</td><td>${c.passport_no||"—"}</td><td>${ag?.name||"—"}</td><td>${c.country||"—"}</td></tr>`;}).join("")}</tbody></table></body></html>`);
+        w.document.close();w.print();
+      };
+      return(
+        <div style={{...CARD,marginBottom:16}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <SecTitle c="⚙️ Pending Manpower"/>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{background:co.orange3,color:co.orange,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>{list.length}</span>
+              <Btn sz="sm" v="ghost" onClick={printIt}>🖨️ Print</Btn>
+            </div>
+          </div>
+          {list.length===0?<div style={{color:co.t3,fontSize:12}}>No pending manpower candidates.</div>:(
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead><tr style={{background:co.navy}}>{["#","Code","Name","Passport No","Agent","Country"].map(h=><th key={h} style={{padding:"7px 10px",color:co.gold,fontSize:9,fontWeight:700,textTransform:"uppercase",textAlign:"left"}}>{h}</th>)}</tr></thead>
+              <tbody>{list.map((c,i)=>{const ag=data.agents.find(a=>a.id===c.agent_id);return(
+                <tr key={c.id} style={{borderBottom:`1px solid ${co.border}`,background:i%2===0?"#fafaf8":co.white}}>
+                  <td style={{padding:"7px 10px",color:co.t3}}>{i+1}</td>
+                  <td style={{padding:"7px 10px"}}><span style={{background:co.navy,color:co.gold,borderRadius:5,padding:"2px 6px",fontSize:10,fontWeight:700,fontFamily:"monospace"}}>{c.ro_code||"—"}</span></td>
+                  <td style={{padding:"7px 10px",fontWeight:600}}>{c.name}</td>
+                  <td style={{padding:"7px 10px",fontFamily:"monospace",fontSize:11,color:co.t3}}>{c.passport_no||"—"}</td>
+                  <td style={{padding:"7px 10px"}}>{ag?.name||"—"}</td>
+                  <td style={{padding:"7px 10px",color:co.t3}}>{c.country||"—"}</td>
+                </tr>
+              );})}</tbody>
+            </table>
+          )}
+        </div>
+      );
+    })()}
+
+    {/* ── Ready for Flight ── */}
+    {(()=>{
+      const today=new Date(); today.setHours(0,0,0,0);
+      const list=data.candidates.filter(c=>!c.archived&&c.current_stage==="flight"&&!(data.flight?.[c.id]?.departed)).map(c=>{
+        const vi=data.visa?.[c.id];
+        const fl=data.flight?.[c.id];
+        let daysLeft="—",expiryDate="—";
+        if(vi&&vi.visa_date){const exp=new Date(vi.visa_date);exp.setDate(exp.getDate()+90);daysLeft=Math.ceil((exp-today)/(1000*60*60*24));expiryDate=exp.toISOString().slice(0,10);}
+        return{...c,flight_date:fl?.flight_date||"—",visa_date:vi?.visa_date||"—",expiry_date:expiryDate,days_left:daysLeft};
+      });
+      const printIt=()=>{
+        const w=window.open("","_blank");
+        w.document.write(`<html><head><title>Ready for Flight</title><style>body{font-family:Arial,sans-serif;padding:20px}h2{color:#0d1b2a;border-bottom:2px solid #c9a84c;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin-top:12px}th{background:#0d1b2a;color:#c9a84c;padding:8px 10px;text-align:left;font-size:12px}td{padding:8px 10px;border-bottom:1px solid #eee;font-size:12px}tr:nth-child(even)td{background:#f9f9f9}.warn{color:#c2410c;font-weight:bold}</style></head><body><h2>✈️ Ready for Flight</h2><p style="color:#666;font-size:11px">Printed: ${new Date().toLocaleString()}</p><table><thead><tr><th>#</th><th>Code</th><th>Name</th><th>Passport No</th><th>Agent</th><th>Flight Date</th><th>Visa Date</th><th>Expiry</th><th>Days Left</th></tr></thead><tbody>${list.map((c,i)=>{const ag=data.agents.find(a=>a.id===c.agent_id);const warn=typeof c.days_left==="number"&&c.days_left<=30;return`<tr><td>${i+1}</td><td>${c.ro_code||"—"}</td><td>${c.name}</td><td>${c.passport_no||"—"}</td><td>${ag?.name||"—"}</td><td>${c.flight_date}</td><td>${c.visa_date}</td><td>${c.expiry_date}</td><td class="${warn?"warn":""}">${typeof c.days_left==="number"?c.days_left+"d":c.days_left}</td></tr>`;}).join("")}</tbody></table></body></html>`);
+        w.document.close();w.print();
+      };
+      return(
+        <div style={{...CARD,marginBottom:16}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <SecTitle c="✈️ Ready for Flight"/>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{background:co.blue3,color:co.blue,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>{list.length}</span>
+              <Btn sz="sm" v="ghost" onClick={printIt}>🖨️ Print</Btn>
+            </div>
+          </div>
+          {list.length===0?<div style={{color:co.t3,fontSize:12}}>No candidates ready for flight.</div>:(
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead><tr style={{background:co.navy}}>{["#","Code","Name","Passport No","Agent","Flight Date","Visa Date","Expiry","Days Left"].map(h=><th key={h} style={{padding:"7px 10px",color:co.gold,fontSize:9,fontWeight:700,textTransform:"uppercase",textAlign:"left"}}>{h}</th>)}</tr></thead>
+              <tbody>{list.map((c,i)=>{const ag=data.agents.find(a=>a.id===c.agent_id);const warn=typeof c.days_left==="number"&&c.days_left<=30;return(
+                <tr key={c.id} style={{borderBottom:`1px solid ${co.border}`,background:i%2===0?"#fafaf8":co.white}}>
+                  <td style={{padding:"7px 10px",color:co.t3}}>{i+1}</td>
+                  <td style={{padding:"7px 10px"}}><span style={{background:co.navy,color:co.gold,borderRadius:5,padding:"2px 6px",fontSize:10,fontWeight:700,fontFamily:"monospace"}}>{c.ro_code||"—"}</span></td>
+                  <td style={{padding:"7px 10px",fontWeight:600}}>{c.name}</td>
+                  <td style={{padding:"7px 10px",fontFamily:"monospace",fontSize:11,color:co.t3}}>{c.passport_no||"—"}</td>
+                  <td style={{padding:"7px 10px"}}>{ag?.name||"—"}</td>
+                  <td style={{padding:"7px 10px",fontWeight:600,color:co.blue}}>{c.flight_date}</td>
+                  <td style={{padding:"7px 10px",color:co.t3,fontSize:11}}>{c.visa_date}</td>
+                  <td style={{padding:"7px 10px",color:co.t3,fontSize:11}}>{c.expiry_date}</td>
+                  <td style={{padding:"7px 10px"}}><span style={{background:warn?co.orange3:co.green3,color:warn?co.orange:co.green,borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:700}}>{typeof c.days_left==="number"?c.days_left+"d":c.days_left}</span></td>
+                </tr>
+              );})}</tbody>
+            </table>
+          )}
+        </div>
+      );
+    })()}
+    <div style={{...CARD,marginBottom:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><SecTitle c="🌍 Country-wise Summary"/><Btn sz="sm" v="ghost" onClick={()=>window.print()}>🖨️ Print</Btn></div>
+      {countryReport.length===0?<div style={{color:co.t3,fontSize:13,textAlign:"center",padding:"20px 0"}}>No candidate data yet.</div>:(
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+          <thead><tr style={{background:co.navy}}>{["Country","Total","Active","Flight Ready","Completed"].map(h=><th key={h} style={{padding:"9px 11px",textAlign:"left",color:co.gold,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:.6}}>{h}</th>)}</tr></thead>
+          <tbody>{countryReport.map(([ctry,s],i)=>(
+            <tr key={ctry} style={{background:i%2===0?"#fafaf8":co.white,borderBottom:`1px solid ${co.border}`}}>
+              <td style={{padding:"9px 11px",fontWeight:700,color:co.navy}}>{ctry}</td>
+              <td style={{padding:"9px 11px",fontWeight:700}}>{s.total}</td>
+              <td style={{padding:"9px 11px",color:co.blue,fontWeight:600}}>{s.active}</td>
+              <td style={{padding:"9px 11px",color:co.gold,fontWeight:600}}>{s.flight}</td>
+              <td style={{padding:"9px 11px",color:co.green,fontWeight:600}}>{s.done}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      )}
+    </div>
+    <div style={CARD}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:9}}>
+        <SecTitle c="📅 Monthly Summary Report"/>
+        <div style={{display:"flex",gap:9,alignItems:"center"}}>
+          <select value={month} onChange={e=>setMonth(e.target.value)} style={{...SEL,width:"auto",fontSize:12}}><option value="">Select Month</option>{allMonths.map(m=><option key={m} value={m}>{m}</option>)}</select>
+          {month&&<Btn sz="sm" v="ghost" onClick={()=>window.print()}>🖨️ Print</Btn>}
+        </div>
+      </div>
+      {!month&&<div style={{color:co.t3,fontSize:13,textAlign:"center",padding:"20px 0"}}>Select a month to view report.</div>}
+      {month&&(<div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10,marginBottom:16}}>
+          {[["Total Added",mCands.length,co.navy2],["Active",mCands.filter(c=>!c.archived&&c.current_stage!=="iqama").length,co.blue],["Completed",mCands.filter(c=>c.current_stage==="iqama").length,co.green],["Archived",mCands.filter(c=>c.archived).length,co.t3]].map(([lbl,val,clr])=>(
+            <div key={lbl} style={{background:co.bg,borderRadius:8,padding:"10px 12px",textAlign:"center",border:`1px solid ${co.border}`}}><div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:clr,lineHeight:1}}>{val}</div><div style={{fontSize:10,color:co.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:.6,marginTop:3}}>{lbl}</div></div>
+          ))}
+        </div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:14}}>{STAGES.filter(s=>sMap[s.id]>0).map(st=>(
+          <div key={st.id} style={{background:co.navy,color:"#fff",borderRadius:7,padding:"7px 11px",textAlign:"center",minWidth:70}}><div style={{fontSize:15}}>{st.icon}</div><div style={{fontSize:9,marginTop:2}}>{st.label}</div><div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:co.gold,lineHeight:1.1,marginTop:2}}>{sMap[st.id]}</div></div>
+        ))}</div>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr style={{background:co.navy}}>{["#","Name","Passport","Country","Agent","Stage","Added"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"left",color:co.gold,fontSize:9,fontWeight:700,textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
+          <tbody>{mCands.map((c,i)=>{const ag=data.agents.find(a=>a.id===c.agent_id);return(
+            <tr key={c.id} style={{background:i%2===0?"#fafaf8":co.white,borderBottom:`1px solid ${co.border}`}}>
+              <td style={{padding:"7px 10px",color:co.t3,fontSize:11}}>{i+1}</td>
+              <td style={{padding:"7px 10px",fontWeight:700,color:co.navy}}>{c.name}</td>
+              <td style={{padding:"7px 10px",fontFamily:"monospace",fontSize:11}}>{c.passport_no}</td>
+              <td style={{padding:"7px 10px",fontSize:11}}>{c.country}</td>
+              <td style={{padding:"7px 10px",fontSize:11,color:co.t2}}>{ag?.name||"—"}</td>
+              <td style={{padding:"7px 10px"}}><StageBadge stage={c.current_stage}/></td>
+              <td style={{padding:"7px 10px",color:co.t3,fontSize:11}}>{c.created_at}</td>
+            </tr>
+          );})}
+          {mCands.length===0&&<tr><td colSpan={7} style={{padding:30,textAlign:"center",color:co.t3}}>No candidates added in {month}.</td></tr>}
+          </tbody>
+        </table>
+      </div>)}
+    </div>
+  </div>);
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
